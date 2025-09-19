@@ -1,0 +1,13 @@
+# Python env
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Generated files
+generated_run.py
