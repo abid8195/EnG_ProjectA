@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>QML Pipeline (Sprint-1)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <h1>Model-Based QML Pipeline (EstimatorQNN)</h1>
+
+  <div class="row">
+    <img src="diagram.jpg" alt="Pipeline Diagram" class="diagram">
+    <div class="panel">
+      <h2>Block Info</h2>
+      <div id="info" class="info"></div>
+      <div class="btns">
+        <button id="btn-dataset">Dataset</button>
+        <button id="btn-encoder">Encoder</button>
+        <button id="btn-circuit">Circuit</button>
+        <button id="btn-optimizer">Optimizer</button>
+        <button id="btn-output">Training & Output</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="btn-export">Export JSON</button>
+    <button id="btn-run">Run Pipeline</button>
+  </div>
+
+  <pre id="result"></pre>
+
+  <script src="app.js"></script>
+</body>
+</html>
