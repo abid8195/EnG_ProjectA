@@ -3,32 +3,45 @@
 <head>
   <meta charset="utf-8" />
   <title>QML Pipeline (Sprint-1)</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Model-Based QML Pipeline (EstimatorQNN)</h1>
+  <div class="container">
+    <div class="header">
+      <h1 class="h1">Model-Based QML Pipeline (EstimatorQNN)</h1>
+      <span id="status" class="badge info" style="display:none;">…</span>
+    </div>
 
-  <div class="row">
-    <img src="diagram.jpg" alt="Pipeline Diagram" class="diagram">
-    <div class="panel">
-      <h2>Block Info</h2>
-      <div id="info" class="info"></div>
-      <div class="btns">
-        <button id="btn-dataset">Dataset</button>
-        <button id="btn-encoder">Encoder</button>
-        <button id="btn-circuit">Circuit</button>
-        <button id="btn-optimizer">Optimizer</button>
-        <button id="btn-output">Training & Output</button>
+    <div class="grid">
+      <div class="card">
+        <img src="diagram.jpg" alt="Pipeline Diagram" class="diagram">
+      </div>
+
+      <div class="card" aria-label="Block Information">
+        <h2>Block Info</h2>
+        <div id="info" class="note">Click a block to see a short note.</div>
+        <div class="toolbar">
+          <button class="btn" id="btn-dataset">Dataset</button>
+          <button class="btn" id="btn-encoder">Encoder</button>
+          <button class="btn" id="btn-circuit">Circuit</button>
+          <button class="btn" id="btn-optimizer">Optimizer</button>
+          <button class="btn" id="btn-output">Training &amp; Output</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="actions">
-    <button id="btn-export">Export JSON</button>
-    <button id="btn-run">Run Pipeline</button>
-  </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Actions</h2>
+      <div class="toolbar">
+        <button class="btn" id="btn-export">Export JSON</button>
+        <button class="btn primary" id="btn-run">Run Pipeline</button>
+      </div>
 
-  <pre id="result"></pre>
+      <!-- Removed Accuracy / n_train / n_test row as requested -->
+
+      <pre id="result" aria-live="polite"></pre>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
