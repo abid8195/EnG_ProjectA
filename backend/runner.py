@@ -16,16 +16,20 @@ def _build_dataset(ds: Dict[str, Any]):
     """Return X_train, X_test, y_train, y_test according to spec."""
     seed = ds.get("seed", 42)
     algorithm_globals.random_seed = seed
-    test_size = ds.get("test_size", 0.2)
+    test_size = float(ds.get("test_size", 0.2))
+    if not (0.05 <= test_size <= 0.5):
+        test_size = 0.2  # keep it sane for small demos
 
-    if ds["type"] == "synthetic-line":
-        n = ds.get("num_samples", 20)
-        d = ds.get("num_features", 2)
+    dtype = ds.get("type", "synthetic-line")
+
+    if dtype == "synthetic-line":
+        n = int(ds.get("num_samples", 20))
+        d = int(ds.get("num_features", 2))
         X = 2 * algorithm_globals.random.random([n, d]) - 1
         y = (np.sum(X, axis=1) >= 0).astype(int) * 2 - 1  # -1/+1
         return train_test_split(X, y, test_size=test_size, random_state=seed)
 
-    elif ds["type"] == "iris":
+    elif dtype == "iris":
         iris = datasets.load_iris()
         X_all = iris.data
         y_all = iris.target
@@ -39,19 +43,22 @@ def _build_dataset(ds: Dict[str, Any]):
         return train_test_split(X, y, test_size=test_size, random_state=seed)
 
     else:
-        raise ValueError(f"Unknown dataset type: {ds['type']}")
+        raise ValueError(f"Unknown dataset type: {dtype}")
 
 
 def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
     """
     Build and run an EstimatorQNN classifier pipeline described by 'spec'.
-    Returns metrics: accuracy, (optional) predictions, sizes.
+    Returns metrics: accuracy, (optional) predictions, sizes, and echo params.
     """
     # 1) Data
     Xtr, Xte, ytr, yte = _build_dataset(spec["dataset"])
 
     # 2) Encoder + Circuit via QNNCircuit (defaults: ZZFeatureMap + RealAmplitudes)
-    num_qubits = spec["circuit"].get("num_qubits", Xtr.shape[1])
+    # if num_qubits missing, default to num features from Xtr
+    num_qubits = int(spec["circuit"].get("num_qubits", Xtr.shape[1]))
+    if num_qubits <= 0:
+        num_qubits = Xtr.shape[1]
     qc = QNNCircuit(num_qubits=num_qubits)
 
     # 3) QNN
@@ -62,7 +69,9 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
     # 4) Optimizer + Classifier
     if spec["optimizer"].get("type", "cobyla") != "cobyla":
         raise ValueError("Sprint-1 supports only optimizer.type = 'cobyla'")
-    maxiter = spec["optimizer"].get("maxiter", 60)
+    maxiter = int(spec["optimizer"].get("maxiter", 60))
+    if maxiter <= 0 or maxiter > 500:
+        maxiter = 60  # keep small to avoid slow demos
     clf = NeuralNetworkClassifier(qnn, optimizer=COBYLA(maxiter=maxiter))
 
     # 5) Train & evaluate
@@ -73,9 +82,15 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
         "accuracy": acc,
         "n_train": int(len(Xtr)),
         "n_test": int(len(Xte)),
+        # helpful echoes for the UI/report:
+        "seed": int(spec["dataset"].get("seed", 42)),
+        "num_qubits": num_qubits,
+        "maxiter": maxiter,
     }
 
     if spec.get("outputs", {}).get("return_predictions", True):
-        result["predictions"] = clf.predict(Xte).tolist()
+        # show at most first 20 predictions to keep output compact
+        preds = clf.predict(Xte).tolist()
+        result["predictions"] = preds[:20]
 
     return result
