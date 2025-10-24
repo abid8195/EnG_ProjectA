@@ -38,6 +38,21 @@
         <input type="file" id="csvFile" accept=".csv" />
         <button class="btn" id="btn-upload">Upload CSV</button>
 
+        <button class="btn" id="btn-load-sample">Load Iris Sample</button>
+
+        <select id="select-encoding" title="Choose an encoding">
+          <option value="angle">Angle Encoding</option>
+          <option value="basis">Basis Encoding</option>
+        </select>
+
+        <select id="select-ansatz" title="Choose ansatz">
+          <option value="ry">RY Layer</option>
+          <option value="cz">CZ Entangler Layer</option>
+        </select>
+
+        <input type="number" id="input-layers" min="1" max="6" value="2" title="Number of variational layers" style="width:80px" />
+
+        <button class="btn" id="btn-generate">Generate Qiskit Code</button>
         <button class="btn" id="btn-export">Export JSON</button>
         <button class="btn primary" id="btn-run">Run Pipeline</button>
       </div>
@@ -47,6 +62,12 @@
 
       <!-- Result JSON -->
       <pre id="result" aria-live="polite"></pre>
+
+      <h3>Generated Code Template</h3>
+      <pre id="codePreview" style="background:#111;color:#cfc;padding:8px;overflow:auto;height:260px;"></pre>
+      <div style="margin-top:8px">
+        <button class="btn" id="btn-download-code">Download Code (py)</button>
+      </div>
     </div>
   </div>
 

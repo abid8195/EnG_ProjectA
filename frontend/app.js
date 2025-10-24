@@ -1,4 +1,3 @@
-
 // ---------- default spec (will switch to CSV after upload) ----------
 const spec = {
   version: "0.1",
@@ -27,6 +26,13 @@ const info   = document.getElementById("info");
 const result = document.getElementById("result");
 const msg    = document.getElementById("msg");
 const fileEl = document.getElementById("csvFile");
+
+const btnLoadSample = document.getElementById("btn-load-sample");
+const btnGenerate   = document.getElementById("btn-generate");
+const btnDownloadCode = document.getElementById("btn-download-code");
+const selectEncoding  = document.getElementById("select-encoding");
+const selectAnsatz    = document.getElementById("select-ansatz");
+const inputLayers     = document.getElementById("input-layers");
 
 const texts = {
   dataset: "Upload a CSV or use the demo synthetic data. CSV should have numeric features and a label/class column.",
@@ -64,6 +70,111 @@ async function uploadCSV(file) {
   return data; // { ok, path, columns, rows, preview }
 }
 
+// --- client-side CSV parsing + iris sample (for quick offline preview)
+const irisSample = `sepal_length,sepal_width,petal_length,petal_width,label
+5.1,3.5,1.4,0.2,0
+4.9,3.0,1.4,0.2,0
+6.2,3.4,5.4,2.3,2
+5.9,3.0,5.1,1.8,2
+5.6,2.9,3.6,1.3,1
+5.7,2.8,4.1,1.3,1`;
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  const header = lines.shift().split(',').map(s => s.trim());
+  const rows = lines.map(line => line.split(',').map(v => v.trim()));
+  return { header, rows };
+}
+
+let currentData = null;
+let generatedCode = '';
+
+// build a pipeline spec from current UI and dataset
+function buildPipelineSpec() {
+  const working = JSON.parse(JSON.stringify(spec)); // shallow copy
+  // dataset from currentData if available
+  if (currentData) {
+    const { header } = currentData;
+    const { label, features } = inferLabelAndFeatures(header);
+    working.dataset = {
+      type: "inline",
+      path: null,
+      label_column: label,
+      feature_columns: features,
+      n_samples: currentData.rows.length,
+      preview: currentData.rows.slice(0,6)
+    };
+    working.circuit.num_qubits = Math.max(1, Math.min(features.length, 4));
+  }
+  // encoder/circuit from UI controls
+  working.encoder = { type: selectEncoding.value };
+  working.circuit = { type: selectAnsatz.value === 'ry' ? 'ry-layer' : 'cz-entangler', num_qubits: working.circuit.num_qubits ?? 4, reps: parseInt(inputLayers.value, 10) || 1 };
+  return working;
+}
+
+function generateQiskitTemplate(specObj) {
+  const features = (specObj.dataset.feature_columns || []).length || 4;
+  const encoding = specObj.encoder.type || 'angle';
+  const ansatz = specObj.circuit.type || 'ry-layer';
+  const layers = specObj.circuit.reps || 1;
+
+  const code = `# Auto-generated Qiskit template (prototype)
+# Requires: qiskit, qiskit-machine-learning
+from qiskit import QuantumCircuit, Aer
+from qiskit.utils import algorithm_globals
+import numpy as np
+
+# --- Data placeholder ---
+# Replace with your data loading (CSV/pandas) to obtain X (n_samples, ${features}) and y
+# X = ...
+# y = ...
+
+# --- Encoding ---
+def build_encoding_circuit(x):
+    qc = QuantumCircuit(${features})
+${encoding === 'angle' ? "    # Angle encoding: map features to RY rotations\n    for i in range(min(len(x), " + features + ")):\n        qc.ry(x[i], i)" : "    # Basis encoding placeholder: convert features to bitstring and prepare basis state\n    # TODO: implement suitable basis encoding\n    pass"}
+    return qc
+
+# --- Variational ansatz ---
+def build_variational_circuit(params):
+    qc = QuantumCircuit(${features})
+    idx = 0
+${ansatz === 'ry-layer' ? `    for l in range(${layers}):
+        for q in range(${features}):
+            qc.ry(params[idx], q); idx += 1
+        for q in range(${features}-1):
+            qc.cz(q, q+1)` : `    for l in range(${layers}):
+        for q in range(${features}):
+            qc.rz(params[idx], q); idx += 1
+        for q in range(${features}-1):
+            qc.cz(q, q+1)`}
+
+    return qc
+
+# --- QNN/Estimator skeleton (integrate with qiskit-machine-learning) ---
+def build_qnn():
+    backend = Aer.get_backend('aer_simulator')
+    # Placeholder: wire encoding+variational circuits into a QNN/Estimator
+    pass
+
+if __name__ == "__main__":
+    print("Template generated. Replace placeholders (data loading, training) and run with qiskit installed.")
+`;
+  return code;
+}
+
+function download(filename, text) {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ---------- button handlers ----------
 document.getElementById("btn-dataset").onclick   = () => (info.textContent = texts.dataset);
 document.getElementById("btn-encoder").onclick   = () => (info.textContent = texts.encoder);
@@ -71,8 +182,10 @@ document.getElementById("btn-circuit").onclick   = () => (info.textContent = tex
 document.getElementById("btn-optimizer").onclick = () => (info.textContent = texts.optimizer);
 document.getElementById("btn-output").onclick    = () => (info.textContent = texts.output);
 
+// export current spec (uses buildPipelineSpec to capture UI state)
 document.getElementById("btn-export").onclick = () => {
-  const blob = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
+  const out = buildPipelineSpec();
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = "pipeline.json"; a.click();
@@ -109,11 +222,35 @@ document.getElementById("btn-upload").onclick = async () => {
     spec.circuit.num_qubits = Math.max(1, Math.min(features.length, 4));
     spec.optimizer.maxiter  = Math.min(spec.optimizer.maxiter ?? 20, 20);
 
+    // update client-side preview state too
+    currentData = { header: up.columns, rows: up.preview || [] };
+
     setMsg(`Upload OK. Using "${label}" as label and ${features.length} feature(s). Rows: ${up.rows}.`, "ok");
     result.textContent = JSON.stringify({ upload: up, chosen: spec.dataset, circuit: spec.circuit, optimizer: spec.optimizer }, null, 2);
   } catch (e) {
     setMsg(String(e.message || e), "err");
   }
+};
+
+btnLoadSample.onclick = () => {
+  currentData = parseCSV(irisSample);
+  setMsg('Iris sample loaded (' + currentData.rows.length + ' rows).', 'ok');
+  result.textContent = JSON.stringify({ header: currentData.header, n_samples: currentData.rows.length }, null, 2);
+};
+
+btnGenerate.onclick = () => {
+  const built = buildPipelineSpec();
+  generatedCode = generateQiskitTemplate(built);
+  document.getElementById("codePreview").textContent = generatedCode;
+  setMsg("Generated code preview ready.", "ok");
+};
+
+btnDownloadCode.onclick = () => {
+  if (!generatedCode) {
+    setMsg("Generate code first.", "err");
+    return;
+  }
+  download("qml_pipeline_template.py", generatedCode);
 };
 
 document.getElementById("btn-run").onclick = async () => {
