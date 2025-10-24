@@ -1,12 +1,12 @@
 /* ===== Dark Teal theme ===== */
 :root{
-  --bg:#0b1220;           /* deep navy */
-  --card:#111827;         /* slate */
-  --ink:#e5e7eb;          /* light text */
-  --muted:#93a3b8;        /* muted text */
-  --line:#1f2937;         /* borders */
-  --accent:#14b8a6;       /* teal */
-  --accent-ink:#062a28;   /* dark teal text */
+  --bg:#57564F;           
+  --card:#7A7A73;         
+  --ink:#DDDAD0;          
+  --muted:#FDEB9E;        
+  --line:#57564F;         
+  --accent:#14b8a6;       
+  --accent-ink:#062a28;   
   --ok:#22c55e; --err:#ef4444; --info:#60a5fa;
 }
 *{box-sizing:border-box}
@@ -20,7 +20,7 @@ body{
 /* ===== Layout ===== */
 .container{max-width:1120px; margin:24px auto; padding:0 16px}
 .header{display:flex; align-items:flex-end; gap:12px; margin-bottom:16px}
-.h1{font-size:28px; font-weight:800; margin:0}
+.h1{font-size:28px; font-weight:800; margin:0; text-align: center; width: 100%}
 .sub{color:var(--muted); font-size:14px}
 
 .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:16px}
@@ -39,7 +39,7 @@ body{
 .btn{
   display:inline-flex; align-items:center; gap:8px;
   padding:8px 12px; border:1px solid var(--line); border-radius:8px;
-  background:#0f172a; color:var(--ink); cursor:pointer; font-weight:600;
+  background:#57564F; color:var(--ink); cursor:pointer; font-weight:600;
 }
 .btn:hover{background:#111b33}
 .btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}

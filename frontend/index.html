@@ -8,7 +8,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1 class="h1">Model-Based QML Pipeline (EstimatorQNN)</h1>
+      <h1 class="h1">QML DataFlow Studio</h1>
       <span id="status" class="badge info" style="display:none;">…</span>
     </div>
 
@@ -32,13 +32,20 @@
 
     <div class="card" style="margin-top:16px">
       <h2>Actions</h2>
-      <div class="toolbar">
+
+      <!-- Upload controls -->
+      <div class="toolbar" style="margin-bottom:8px;">
+        <input type="file" id="csvFile" accept=".csv" />
+        <button class="btn" id="btn-upload">Upload CSV</button>
+
         <button class="btn" id="btn-export">Export JSON</button>
         <button class="btn primary" id="btn-run">Run Pipeline</button>
       </div>
 
-      <!-- Removed Accuracy / n_train / n_test row as requested -->
+      <!-- Message area for success/errors/info -->
+      <div id="msg" class="note" style="margin-top:4px;"></div>
 
+      <!-- Result JSON -->
       <pre id="result" aria-live="polite"></pre>
     </div>
   </div>

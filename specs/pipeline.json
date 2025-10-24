@@ -3,15 +3,24 @@
   "pipeline": "qml-classifier",
   "qnn": { "type": "estimator" },
   "dataset": {
-    "type": "synthetic-line",
-    "num_samples": 20,
-    "num_features": 2,
-    "rule": "x_plus_y_ge_0",
+    "type": "csv",
+    "path": "uploads/diabetes.csv",
+    "label_column": "Outcome",
+    "feature_columns": [
+      "Pregnancies",
+      "Glucose",
+      "BloodPressure",
+      "SkinThickness",
+      "Insulin",
+      "BMI",
+      "DiabetesPedigreeFunction",
+      "Age"
+    ],
     "test_size": 0.2,
     "seed": 42
   },
   "encoder": { "type": "zzfeaturemap" },
-  "circuit": { "type": "realamplitudes", "num_qubits": 2, "reps": 1 },
+  "circuit": { "type": "realamplitudes", "num_qubits": 8, "reps": 1 },
   "optimizer": { "type": "cobyla", "maxiter": 60 },
   "outputs": { "return_predictions": true, "return_generated_code": true }
 }
