@@ -71,12 +71,336 @@ async function uploadCSV(file) {
 }
 
 /*
-  Extended frontend logic:
-  - Drawflow visual editor (nodes + connections)
-  - Side-panel node editor (select node -> edit params -> persist)
-  - Save / Load model JSON (download/upload)
-  - Generate pipeline spec & Qiskit template from model
+  Fixed startup/initialization for Drawflow + side-panel.
+  - Wrap initialization in DOMContentLoaded to ensure elements exist
+  - Add setMsg helper and global error handler so JS failures surface in UI
+  - Defensive lookups for DOM elements (no-op if missing)
+  - Keeps existing logic (node add, export, import, codegen, CSV sample)
 */
+
+(function () {
+  'use strict';
+
+  // Helper: show messages to the user
+  function setMsg(text, type = 'info') {
+    try {
+      const el = document.getElementById('msg');
+      if (el) {
+        el.textContent = text || '';
+        el.style.color = type === 'err' ? '#ef4444' : type === 'ok' ? '#22c55e' : '#444';
+      } else {
+        console.log('[msg]', text);
+      }
+    } catch (e) { console.error(e); }
+  }
+
+  // Log JS errors into UI for easier debugging
+  window.addEventListener('error', function (ev) {
+    console.error('Unhandled error', ev.error || ev.message);
+    setMsg('JavaScript error: ' + (ev.error?.message || ev.message), 'err');
+  });
+
+  document.addEventListener('DOMContentLoaded', function () {
+    try {
+      // Ensure required DOM elements exist before proceeding
+      if (!document.getElementById('drawflow')) {
+        setMsg('Editor container not found (missing #drawflow).', 'err');
+        return;
+      }
+
+      // Initialize Drawflow editor safely
+      const editor = new Drawflow(document.getElementById('drawflow'));
+      editor.reroute = true;
+      editor.start();
+
+      // small incremental placement
+      let nextNodeX = 10;
+      let nextNodeY = 10;
+      function nextPos() {
+        const p = { x: nextNodeX, y: nextNodeY };
+        nextNodeX += 160;
+        if (nextNodeX > 900) { nextNodeX = 10; nextNodeY += 160; }
+        return p;
+      }
+
+      // Create node html with inputs for side-panel / persistence
+      function nodeHtml(title, fields = []) {
+        let body = `<div class="node-title"><strong>${title}</strong></div>`;
+        fields.forEach(f => {
+          const val = f.value ?? f.default ?? '';
+          body += `<label class="node-param">${f.label}: <input data-param="${f.name}" value="${val}" style="width:140px" /></label>`;
+        });
+        return `<div class="box">${body}</div>`;
+      }
+
+      function addTypedNode(type, title, params = []) {
+        const pos = nextPos();
+        const html = nodeHtml(title, params);
+        const inputs = type === 'dataset' ? 0 : 1;
+        const outputs = type === 'output' ? 0 : 1;
+        const data = { type, params: params.reduce((acc, p) => { acc[p.name] = p.value ?? p.default ?? ''; return acc; }, {}) };
+        const nodeId = editor.addNode(title, inputs, outputs, pos.x, pos.y, null, data, html);
+        setMsg(`${title} node added.`, 'ok');
+        return nodeId;
+      }
+
+      // Attach toolbar actions if buttons exist
+      const btn = id => document.getElementById(id);
+      if (btn('add-dataset')) btn('add-dataset').addEventListener('click', () => {
+        addTypedNode('dataset', 'Dataset', [{ name: 'path', label: 'path', default: '' }, { name: 'label_column', label: 'label_col', default: 'label' }]);
+      });
+      if (btn('add-encoder')) btn('add-encoder').addEventListener('click', () => {
+        addTypedNode('encoder', 'Encoder', [{ name: 'type', label: 'type', default: 'angle' }]);
+      });
+      if (btn('add-circuit')) btn('add-circuit').addEventListener('click', () => {
+        addTypedNode('circuit', 'Circuit', [{ name: 'ansatz', label: 'ansatz', default: 'ry' }, { name: 'layers', label: 'layers', default: '2' }]);
+      });
+      if (btn('add-optimizer')) btn('add-optimizer').addEventListener('click', () => {
+        addTypedNode('optimizer', 'Optimizer', [{ name: 'name', label: 'name', default: 'SPSA' }, { name: 'maxiter', label: 'maxiter', default: '100' }]);
+      });
+      if (btn('add-output')) btn('add-output').addEventListener('click', () => {
+        addTypedNode('output', 'Output', [{ name: 'model', label: 'model', default: 'qnn' }]);
+      });
+
+      // Extract params helpers
+      function extractNodeParamsFromHtml(html) {
+        const params = {};
+        try {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = html || '';
+          const inputs = tmp.querySelectorAll('[data-param]');
+          inputs.forEach(inp => { params[inp.getAttribute('data-param')] = inp.value; });
+        } catch (e) { /* ignore */ }
+        return params;
+      }
+      function extractNodeParams(nodeObj) {
+        const params = {};
+        if (!nodeObj) return params;
+        if (nodeObj.html) Object.assign(params, extractNodeParamsFromHtml(nodeObj.html));
+        if (nodeObj.data?.params) Object.assign(params, nodeObj.data.params);
+        return params;
+      }
+
+      // export model to simple schema
+      function exportModelSchema() {
+        const exported = editor.export();
+        const nodesObj = exported.drawflow?.Home || {};
+        const nodes = [];
+        const edges = [];
+        Object.keys(nodesObj).forEach(id => {
+          const n = nodesObj[id];
+          const params = extractNodeParams(n);
+          nodes.push({
+            id: parseInt(id, 10),
+            type: n.data?.type || (n.name || '').toLowerCase(),
+            name: n.name,
+            pos: { x: n.pos_x, y: n.pos_y },
+            params
+          });
+          if (n.outputs) {
+            Object.keys(n.outputs).forEach(outputIndex => {
+              const connections = n.outputs[outputIndex].connections || [];
+              connections.forEach(conn => {
+                edges.push({
+                  source: parseInt(id, 10),
+                  source_output: parseInt(outputIndex, 10),
+                  target: conn.node,
+                  target_input: conn.input
+                });
+              });
+            });
+          }
+        });
+        return { version: "0.1", nodes, edges, created_at: new Date().toISOString() };
+      }
+
+      function downloadFile(filename, text, mime='application/json') {
+        const blob = new Blob([text], { type: mime + ';charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      if (btn('btn-export-model')) btn('btn-export-model').addEventListener('click', () => {
+        const model = exportModelSchema();
+        downloadFile('pipeline_model.json', JSON.stringify(model, null, 2));
+        setMsg('Model JSON exported.');
+      });
+
+      // side-panel selection handling
+      let lastSelectedNodeId = null;
+      function showNodeInSidepanel(nodeId) {
+        const exported = editor.export();
+        const home = exported.drawflow?.Home || {};
+        const node = home[nodeId];
+        const selInfo = document.getElementById('selected-info');
+        const paramsDiv = document.getElementById('node-params');
+        if (!paramsDiv || !selInfo) return;
+        paramsDiv.innerHTML = '';
+        if (!node) {
+          selInfo.textContent = 'No node selected.';
+          lastSelectedNodeId = null;
+          return;
+        }
+        lastSelectedNodeId = parseInt(nodeId, 10);
+        selInfo.textContent = `Selected: ${node.name} (id=${nodeId})`;
+        const params = extractNodeParams(node);
+        Object.keys(params).forEach(k => {
+          const v = params[k] ?? '';
+          const el = document.createElement('label');
+          el.className = 'node-param';
+          el.innerHTML = `${k}: <input id="param-${k}" data-param="${k}" value="${v}" style="width:160px" />`;
+          paramsDiv.appendChild(el);
+        });
+        if (Object.keys(params).length === 0) {
+          paramsDiv.innerHTML = '<div class="muted">No editable params for this node.</div>';
+        }
+      }
+
+      // Hook up drawflow selection events (safe)
+      try {
+        editor.on('nodeSelected', function (id) { showNodeInSidepanel(id); });
+        editor.on('nodeUnselected', function () { showNodeInSidepanel(null); });
+      } catch (e) {
+        // Older/newer Drawflow builds may differ; provide a fallback: poll selection on click
+        document.getElementById('drawflow').addEventListener('click', function () {
+          const exported = editor.export();
+          // pick first selected node if any (Drawflow stores selected under 'editor_selected' in some versions)
+          const sel = Object.keys(exported.drawflow?.Home || {})[0];
+          showNodeInSidepanel(sel);
+        });
+      }
+
+      // Save node edits back to editor
+      if (btn('btn-save-node')) btn('btn-save-node').addEventListener('click', () => {
+        if (!lastSelectedNodeId) { setMsg('Select a node first.', 'err'); return; }
+        const exported = editor.export();
+        const home = exported.drawflow?.Home || {};
+        const node = home[lastSelectedNodeId];
+        if (!node) { setMsg('Selected node not found.', 'err'); return; }
+        const paramsDiv = document.getElementById('node-params');
+        const inputs = paramsDiv.querySelectorAll('[data-param]');
+        const newParams = {};
+        inputs.forEach(inp => { newParams[inp.getAttribute('data-param')] = inp.value; });
+        const fields = Object.keys(newParams).map(k => ({ name: k, label: k, value: newParams[k] }));
+        node.html = nodeHtml(node.name, fields);
+        node.data = node.data || {};
+        node.data.params = Object.assign({}, node.data.params || {}, newParams);
+        exported.drawflow = exported.drawflow || {};
+        exported.drawflow.Home = exported.drawflow.Home || {};
+        exported.drawflow.Home[lastSelectedNodeId] = node;
+        editor.import(exported);
+        setMsg('Node saved.');
+        showNodeInSidepanel(lastSelectedNodeId);
+      });
+
+      if (btn('btn-delete-node')) btn('btn-delete-node').addEventListener('click', () => {
+        if (!lastSelectedNodeId) { setMsg('Select a node to delete.', 'err'); return; }
+        try {
+          editor.removeNode(lastSelectedNodeId);
+          setMsg('Node deleted.');
+          lastSelectedNodeId = null;
+          showNodeInSidepanel(null);
+        } catch (e) {
+          setMsg('Failed to delete node: ' + e.message, 'err');
+        }
+      });
+
+      // Load model (file input)
+      const fileLoadEl = document.getElementById('file-load-model');
+      if (btn('btn-load-model-ui')) btn('btn-load-model-ui').addEventListener('click', () => {
+        if (fileLoadEl) fileLoadEl.click();
+      });
+      if (fileLoadEl) {
+        fileLoadEl.addEventListener('change', (ev) => {
+          const f = ev.target.files[0];
+          if (!f) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const json = JSON.parse(reader.result);
+              // convert pipeline schema shape into drawflow if needed
+              if (json.nodes && json.edges) {
+                const draw = { drawflow: { Home: {} }, modules: {} };
+                json.nodes.forEach(n => {
+                  const fields = Object.keys(n.params || {}).map(k => ({ name: k, label: k, value: n.params[k] }));
+                  const html = nodeHtml(n.name || n.type, fields);
+                  draw.drawflow.Home[String(n.id)] = {
+                    id: n.id,
+                    name: n.name || n.type,
+                    html,
+                    pos_x: n.pos?.x || 10,
+                    pos_y: n.pos?.y || 10,
+                    data: { type: n.type, params: n.params },
+                    inputs: {},
+                    outputs: {}
+                  };
+                });
+                json.edges.forEach((e) => {
+                  const s = String(e.source);
+                  const t = String(e.target);
+                  draw.drawflow.Home[s].outputs = draw.drawflow.Home[s].outputs || {};
+                  draw.drawflow.Home[s].outputs[0] = draw.drawflow.Home[s].outputs[0] || { connections: [] };
+                  draw.drawflow.Home[s].outputs[0].connections.push({ node: parseInt(t, 10), input: e.target_input ?? 0 });
+                });
+                editor.import(draw);
+                setMsg('Model loaded (converted).');
+                return;
+              }
+              if (json.drawflow) {
+                editor.import(json);
+                setMsg('Drawflow model loaded.');
+              } else {
+                setMsg('Unrecognized model format.', 'err');
+              }
+            } catch (e) {
+              setMsg('Failed to load model: ' + e.message, 'err');
+            }
+          };
+          reader.readAsText(f);
+        });
+      }
+
+      // Generate from model -> pipeline spec + code preview
+      if (btn('btn-generate-from-model')) btn('btn-generate-from-model').addEventListener('click', () => {
+        const model = exportModelSchema();
+        const nmap = {};
+        model.nodes.forEach(n => { nmap[n.type || n.name.toLowerCase()] = n; });
+        const featureCount = 4;
+        const pipeline = {
+          name: 'qml-pipeline-from-model',
+          dataset: nmap['dataset'] ? { type: 'inline', path: nmap['dataset'].params.path || null, label_column: nmap['dataset'].params.label_column || null } : { type: 'inline', n_samples: 6 },
+          encoder: { type: nmap['encoder'] ? (nmap['encoder'].params.type || 'angle') : 'angle', params: { features: featureCount } },
+          circuit: { ansatz: nmap['circuit'] ? (nmap['circuit'].params.ansatz || 'ry') : 'ry', layers: parseInt(nmap['circuit']?.params.layers || 2, 10) },
+          optimizer: { name: nmap['optimizer'] ? (nmap['optimizer'].params.name || 'SPSA') : 'SPSA', maxiter: parseInt(nmap['optimizer']?.params.maxiter || 100, 10) },
+          output: { model: nmap['output'] ? (nmap['output'].params.model || 'qnn') : 'qnn', framework: 'qiskit' }
+        };
+        const resultEl = document.getElementById('result');
+        if (resultEl) resultEl.textContent = JSON.stringify(pipeline, null, 2);
+        const code = (typeof generateQiskitTemplate === 'function') ? generateQiskitTemplate(pipeline) : '# code generator not available';
+        const preview = document.getElementById('codePreview');
+        if (preview) preview.textContent = code;
+        setMsg('Generated pipeline spec and code from model.', 'ok');
+      });
+
+      // Expose editor for debugging (optional)
+      window.__drawflow_editor = editor;
+
+      // Indicate ready
+      setMsg('Editor ready. Add nodes from the toolbar.', 'ok');
+
+    } catch (err) {
+      console.error('Initialization failed', err);
+      setMsg('Initialization error: ' + (err?.message || err), 'err');
+    }
+  }); // DOMContentLoaded end
+
+})(); // IIFE end
 
 /////////////////////// Drawflow visual editor ///////////////////////
 const editor = new Drawflow(document.getElementById("drawflow"));
@@ -328,13 +652,6 @@ document.getElementById('file-load-model').addEventListener('change', (ev) => {
     }
   };
   reader.readAsText(f);
-});
-
-// Export model JSON button (existing)
-document.getElementById("btn-export-model").addEventListener("click", () => {
-  const model = exportModelSchema();
-  download('pipeline_model.json', JSON.stringify(model, null, 2));
-  setMsg('Model JSON exported.');
 });
 
 // Generate pipeline spec & code from current visual model (existing behavior retained)

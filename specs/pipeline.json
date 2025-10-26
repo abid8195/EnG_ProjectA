@@ -1,26 +1,37 @@
 {
-  "version": "0.1",
-  "pipeline": "qml-classifier",
-  "qnn": { "type": "estimator" },
-  "dataset": {
-    "type": "csv",
-    "path": "uploads/diabetes.csv",
-    "label_column": "Outcome",
-    "feature_columns": [
-      "Pregnancies",
-      "Glucose",
-      "BloodPressure",
-      "SkinThickness",
-      "Insulin",
-      "BMI",
-      "DiabetesPedigreeFunction",
-      "Age"
-    ],
-    "test_size": 0.2,
-    "seed": 42
-  },
-  "encoder": { "type": "zzfeaturemap" },
-  "circuit": { "type": "realamplitudes", "num_qubits": 8, "reps": 1 },
-  "optimizer": { "type": "cobyla", "maxiter": 60 },
-  "outputs": { "return_predictions": true, "return_generated_code": true }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QML Pipeline Visual Model Schema",
+  "type": "object",
+  "required": ["version", "nodes", "edges"],
+  "properties": {
+    "version": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "name", "pos"],
+        "properties": {
+          "id": { "type": "integer" },
+          "type": { "type": "string", "description": "one of dataset, encoder, circuit, optimizer, output" },
+          "name": { "type": "string" },
+          "pos": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
+          "params": { "type": "object", "additionalProperties": true }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "target"],
+        "properties": {
+          "source": { "type": "integer" },
+          "source_output": { "type": "integer" },
+          "target": { "type": "integer" },
+          "target_input": { "type": "integer" }
+        }
+      }
+    }
+  }
 }
