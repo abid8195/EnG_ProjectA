@@ -40,13 +40,21 @@ body{
 /* ===== Buttons & badges ===== */
 .btn{
   display:inline-flex; align-items:center; gap:8px;
-  padding:6px 12px; border:1px solid #ddd; border-radius:4px;
-  background: white; color:var(--ink); cursor:pointer; font-weight:600;
+  padding:8px 14px; border-radius:6px;
+  background: #f7fafc; color:#0b1220; cursor:pointer; font-weight:700;
+  border: 1px solid rgba(11,18,32,0.08);
+  box-shadow: 0 1px 0 rgba(11,18,32,0.04);
 }
-.btn:hover{background:#f0f0f0}
-.btn.primary{background: #0066cc; color: white; border-color: #0052a3}
-.btn.primary:hover{filter:brightness(0.95)}
+.btn:hover{background:#eef2f7}
+.btn.primary{background: var(--accent); color: var(--accent-ink); border-color: rgba(0,0,0,0.08)}
+.btn.primary:hover{filter:brightness(0.98)}
 .toolbar{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px}
+
+/* Ensure toolbar and sidepanel sit above the drawflow canvas so clicks reach buttons */
+.editor-toolbar{position:relative; z-index:20}
+#sidepanel{position:relative; z-index:15}
+#drawflow{position:relative; z-index:5}
+.btn{position:relative; z-index:25}
 
 .badge{
   display:inline-block; padding:2px 6px; border-radius:4px; font-size:12px;

@@ -1,0 +1,8 @@
+flask
+flask-cors
+pytest
+numpy
+scikit-learn
+qiskit
+# Optional (for advanced QML codegen):
+# qiskit-machine-learning
