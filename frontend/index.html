@@ -4,6 +4,32 @@
   <meta charset="utf-8" />
   <title>QML Pipeline (Sprint-1)</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- Drawflow CSS (lightweight visual block editor) -->
+  <link rel="stylesheet" href="https://unpkg.com/drawflow/dist/drawflow.min.css" />
+  <style>
+    /* small layout tweaks for the editor area */
+    #drawflow {
+      width: calc(100% - 320px);
+      height: 480px;
+      background: #fafafa;
+      border: 1px solid #ddd;
+      overflow: auto;
+      float: left;
+    }
+    #sidepanel {
+      width: 300px;
+      height: 480px;
+      float: right;
+      border-left: 1px solid #eee;
+      padding: 12px;
+      box-sizing: border-box;
+      background: #fff;
+    }
+    .node-param { display:block; margin:6px 0; font-size:13px; }
+    .editor-toolbar { margin-bottom:8px; display:flex; gap:6px; flex-wrap:wrap; }
+    .muted { color:#666; font-size:12px; }
+    .clear { clear:both; }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -14,7 +40,41 @@
 
     <div class="grid">
       <div class="card">
-        <img src="diagram.jpg" alt="Pipeline Diagram" class="diagram">
+        <h2>Visual Modeler</h2>
+        <div class="editor-toolbar">
+          <button class="btn" id="add-dataset">Add Dataset</button>
+          <button class="btn" id="add-encoder">Add Encoder</button>
+          <button class="btn" id="add-circuit">Add Circuit</button>
+          <button class="btn" id="add-optimizer">Add Optimizer</button>
+          <button class="btn" id="add-output">Add Output</button>
+
+          <button class="btn" id="btn-export-model">Export Model JSON</button>
+          <button class="btn" id="btn-load-model">Load Model JSON</button>
+          <button class="btn" id="btn-generate-from-model">Generate From Model</button>
+        </div>
+
+        <div id="drawflow" class="drawflow"></div>
+
+        <div id="sidepanel" aria-label="Node editor">
+          <h3>Node editor</h3>
+          <div id="selected-info" class="muted">No node selected. Click a node or add one.</div>
+          <div id="node-params" style="margin-top:8px;"></div>
+          <div style="margin-top:10px">
+            <button class="btn" id="btn-save-node">Save Node</button>
+            <button class="btn" id="btn-delete-node">Delete Node</button>
+          </div>
+
+          <hr style="margin:12px 0" />
+          <div>
+            <h4>Persistence</h4>
+            <input type="file" id="file-load-model" accept=".json" style="display:none" />
+            <button class="btn" id="btn-save-model">Download Model</button>
+            <button class="btn" id="btn-load-model-ui">Upload Model</button>
+            <div class="muted" style="margin-top:8px">Model persisted as Drawflow JSON. Use "Generate From Model" to create pipeline spec / code.</div>
+          </div>
+        </div>
+
+        <div class="clear"></div>
       </div>
 
       <div class="card" aria-label="Block Information">
@@ -71,6 +131,8 @@
     </div>
   </div>
 
+  <!-- Drawflow JS -->
+  <script src="https://unpkg.com/drawflow/dist/drawflow.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
