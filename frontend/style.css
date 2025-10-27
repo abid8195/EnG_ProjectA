@@ -50,11 +50,74 @@ body{
 .btn.primary:hover{filter:brightness(0.98)}
 .toolbar{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px}
 
-/* Ensure toolbar and sidepanel sit above the drawflow canvas so clicks reach buttons */
-.editor-toolbar{position:relative; z-index:20}
-#sidepanel{position:relative; z-index:15}
-#drawflow{position:relative; z-index:5}
-.btn{position:relative; z-index:25}
+/* Visual Modeler styling */
+.editor-toolbar { 
+  position: relative; 
+  z-index: 20;
+  margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#drawflow {
+  position: relative;
+  z-index: 5;
+  background: #fafafa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+#sidepanel {
+  position: relative;
+  z-index: 15;
+  background: #fff;
+  padding: 16px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+/* Drawflow node styling */
+.drawflow .drawflow-node {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.drawflow .drawflow-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.drawflow .drawflow-node .box {
+  padding: 10px;
+}
+
+.drawflow .drawflow-node .node-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.drawflow .drawflow-node .node-param {
+  display: block;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.drawflow .drawflow-node input {
+  width: 140px;
+  padding: 4px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+}
+
+/* Ensure buttons are always clickable */
+.btn { 
+  position: relative;
+  z-index: 25;
+}
 
 .badge{
   display:inline-block; padding:2px 6px; border-radius:4px; font-size:12px;
