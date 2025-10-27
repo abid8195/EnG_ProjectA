@@ -23,7 +23,6 @@ from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from qiskit import QuantumCircuit, Aer
-from qiskit.opflow import StateFn, Z, AerPauliExpectation, PauliOp
 
 def load_model(path):
     with open(path, 'r', encoding='utf-8') as f:

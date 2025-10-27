@@ -1,138 +1,145 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>QML Pipeline (Sprint-1)</title>
+
+  <!-- Your stylesheet is still loaded; we also add a few inline rules below -->
   <link rel="stylesheet" href="style.css" />
-  <!-- Drawflow CSS (lightweight visual block editor) -->
-  <link rel="stylesheet" href="https://unpkg.com/drawflow/dist/drawflow.min.css" />
+
   <style>
-    /* small layout tweaks for the editor area */
-    #drawflow {
-      width: calc(100% - 320px);
-      height: 480px;
-      background: #fafafa;
-      border: 1px solid #ddd;
-      overflow: auto;
-      float: left;
+    :root { --ink:#111; --card:#fff; --line:#e5e7eb; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .wrap { max-width: 1200px; margin: 18px auto; padding: 0 12px; }
+    .panel { margin-top: 8px; }
+    .toolbar .btn { margin-right: 6px; margin-bottom: 6px; }
+    .btn { padding: 6px 10px; border: 1px solid #cbd5e1; background:#fff; border-radius: 6px; cursor: pointer; }
+    .btn.primary { background:#111; color:#fff; border-color:#111; }
+    .note { color:#64748b; }
+    .muted { color:#64748b; }
+
+    /* Built-in canvas (no Drawflow) */
+    .studio { display:flex; gap:14px; align-items:flex-start; }
+    #canvas {
+      width: calc(100% - 360px);
+      height: 72vh; min-height: 520px;
+      background:#fafafa; border:1px solid #ddd; border-radius:10px;
+      position: relative; overflow: auto;
     }
-    #sidepanel {
-      width: 300px;
-      height: 480px;
-      float: right;
-      border-left: 1px solid #eee;
-      padding: 12px;
-      box-sizing: border-box;
-      background: #fff;
+    #sidepanel{
+      width:340px; min-width:340px; background:var(--card);
+      border:1px solid var(--line); border-radius:10px;
+      padding:10px; color:var(--ink); height:72vh; overflow:auto;
     }
-    .node-param { display:block; margin:6px 0; font-size:13px; }
-    .editor-toolbar { margin-bottom:8px; display:flex; gap:6px; flex-wrap:wrap; }
-    .muted { color:#666; font-size:12px; }
-    .clear { clear:both; }
+
+    /* Nodes */
+    .node {
+      position:absolute; min-width: 160px; max-width: 260px;
+      background:#fff; border:1px solid #d1d5db; border-radius:8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.06);
+      padding:8px; cursor:grab; user-select:none;
+    }
+    .node:active { cursor:grabbing; }
+    .node .node-title { font-weight:600; margin-bottom:6px; }
+    .node .node-param { display:block; margin:6px 0; }
+    .node .node-param input { width:100%; padding:4px 6px; border:1px solid #e5e7eb; border-radius:6px; }
+    .node.selected { outline: 2px solid #3b82f6; }
+
+    /* Wiring */
+    #wires {
+      position: absolute; inset: 0;
+      pointer-events: none; /* wires don't block clicks */
+    }
+    .node .port {
+      width: 10px; height: 10px; border-radius: 50%;
+      display: inline-block; vertical-align: middle;
+      margin: 0 6px; box-shadow: 0 0 0 2px #fff inset;
+      cursor: crosshair;
+    }
+    .node .port.in  { background: #10b981; }  /* green */
+    .node .port.out { background: #3b82f6; }  /* blue  */
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1 class="h1">QML DataFlow Studio</h1>
-      <span id="status" class="badge info" style="display:none;">…</span>
-    </div>
+  <div class="wrap">
+    <h1>QML DataFlow Studio</h1>
 
-    <div class="grid">
-      <div class="card">
-        <h2>Visual Modeler</h2>
-        <div class="editor-toolbar">
-          <button class="btn" id="add-dataset">Add Dataset</button>
-          <button class="btn" id="add-encoder">Add Encoder</button>
-          <button class="btn" id="add-circuit">Add Circuit</button>
-          <button class="btn" id="add-optimizer">Add Optimizer</button>
-          <button class="btn" id="add-output">Add Output</button>
+    <div class="panel">
+      <div class="toolbar">
+        <button type="button" class="btn" id="add-dataset">Add Dataset</button>
+        <button type="button" class="btn" id="add-encoder">Add Encoder</button>
+        <button type="button" class="btn" id="add-circuit">Add Circuit</button>
+        <button type="button" class="btn" id="add-optimizer">Add Optimizer</button>
+        <button type="button" class="btn" id="add-output">Add Output</button>
+        <button type="button" class="btn" id="btn-export-model">Export Model JSON</button>
+        <button type="button" class="btn" id="btn-load-model">Load Model JSON</button>
+        <button type="button" class="btn" id="btn-generate-from-model">Generate From Model</button>
+      </div>
 
-          <button class="btn" id="btn-export-model">Export Model JSON</button>
-          <button class="btn" id="btn-load-model">Load Model JSON</button>
-          <button class="btn" id="btn-generate-from-model">Generate From Model</button>
+      <div class="studio">
+        <div id="canvas" aria-label="Model canvas">
+          <svg id="wires"></svg>
         </div>
-
-        <div id="drawflow" class="drawflow"></div>
 
         <div id="sidepanel" aria-label="Node editor">
           <h3>Node editor</h3>
           <div id="selected-info" class="muted">No node selected. Click a node or add one.</div>
           <div id="node-params" style="margin-top:8px;"></div>
           <div style="margin-top:10px">
-            <button class="btn" id="btn-save-node">Save Node</button>
-            <button class="btn" id="btn-delete-node">Delete Node</button>
+            <button type="button" class="btn" id="btn-save-node">Save Node</button>
+            <button type="button" class="btn" id="btn-delete-node">Delete Node</button>
           </div>
 
           <hr style="margin:12px 0" />
-          <div>
-            <h4>Persistence</h4>
-            <input type="file" id="file-load-model" accept=".json" style="display:none" />
-            <button class="btn" id="btn-save-model">Download Model</button>
-            <button class="btn" id="btn-load-model-ui">Upload Model</button>
-            <div class="muted" style="margin-top:8px">Model persisted as Drawflow JSON. Use "Generate From Model" to create pipeline spec / code.</div>
+          <h4>Persistence</h4>
+          <input type="file" id="file-load-model" accept=".json" style="display:none" />
+          <button type="button" class="btn" id="btn-save-model">Download Model</button>
+          <button type="button" class="btn" id="btn-load-model-ui">Upload Model</button>
+
+          <hr style="margin:12px 0" />
+          <h3>Block Info</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+            <button type="button" class="btn" data-info="dataset">Dataset</button>
+            <button type="button" class="btn" data-info="encoder">Encoder</button>
+            <button type="button" class="btn" data-info="circuit">Circuit</button>
+            <button type="button" class="btn" data-info="optimizer">Optimizer</button>
+            <button type="button" class="btn" data-info="output">Training & Output</button>
           </div>
-        </div>
-
-        <div class="clear"></div>
-      </div>
-
-      <div class="card" aria-label="Block Information">
-        <h2>Block Info</h2>
-        <div id="info" class="note">Click a block to see a short note.</div>
-        <div class="toolbar">
-          <button class="btn" id="btn-dataset">Dataset</button>
-          <button class="btn" id="btn-encoder">Encoder</button>
-          <button class="btn" id="btn-circuit">Circuit</button>
-          <button class="btn" id="btn-optimizer">Optimizer</button>
-          <button class="btn" id="btn-output">Training &amp; Output</button>
+          <div id="info-text" class="note"></div>
         </div>
       </div>
-    </div>
 
-    <div class="card" style="margin-top:16px">
-      <h2>Actions</h2>
-
-      <!-- Upload controls -->
-      <div class="toolbar" style="margin-bottom:8px;">
+      <div class="panel" style="margin-top:12px">
+        <h3>Actions</h3>
         <input type="file" id="csvFile" accept=".csv" />
-        <button class="btn" id="btn-upload">Upload CSV</button>
+        <button type="button" class="btn" id="btn-upload">Upload CSV</button>
+        <button type="button" class="btn" id="btn-load-sample">Load Iris Sample</button>
 
-        <button class="btn" id="btn-load-sample">Load Iris Sample</button>
-
-        <select id="select-encoding" title="Choose an encoding">
+        <select id="select-encoding">
           <option value="angle">Angle Encoding</option>
           <option value="basis">Basis Encoding</option>
         </select>
-
-        <select id="select-ansatz" title="Choose ansatz">
+        <select id="select-ansatz">
           <option value="ry">RY Layer</option>
-          <option value="cz">CZ Entangler Layer</option>
+          <option value="realamplitudes">RealAmplitudes</option>
         </select>
-
-        <input type="number" id="input-layers" min="1" max="6" value="2" title="Number of variational layers" style="width:80px" />
-
-        <button class="btn" id="btn-generate">Generate Qiskit Code</button>
-        <button class="btn" id="btn-export">Export JSON</button>
-        <button class="btn primary" id="btn-run">Run Pipeline</button>
+        <input id="input-layers" type="number" min="1" max="6" step="1" value="2" style="width:60px" />
+        <button type="button" class="btn" id="btn-generate">Generate Qiskit Code</button>
+        <button type="button" class="btn" id="btn-export">Export JSON</button>
+        <button type="button" class="btn primary" id="btn-run">Run Pipeline</button>
       </div>
 
-      <!-- Message area for success/errors/info -->
       <div id="msg" class="note" style="margin-top:4px;"></div>
-
-      <!-- Result JSON -->
       <pre id="result" aria-live="polite"></pre>
 
       <h3>Generated Code Template</h3>
       <pre id="codePreview" style="background:#111;color:#cfc;padding:8px;overflow:auto;height:260px;"></pre>
-      <div style="margin-top:8px">
-        <button class="btn" id="btn-download-code">Download Code (py)</button>
-      </div>
+      <div style="margin-top:8px"><button type="button" class="btn" id="btn-download-code">Download Code (py)</button></div>
     </div>
   </div>
 
-  <!-- Drawflow JS -->
-  <script src="https://unpkg.com/drawflow/dist/drawflow.min.js"></script>
-  <script src="app.js"></script>
+  <!-- No external Drawflow any more -->
+  <script src="app.js" defer></script>
 </body>
 </html>
