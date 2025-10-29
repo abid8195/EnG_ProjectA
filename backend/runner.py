@@ -48,15 +48,19 @@ except Exception:
     Estimator = None
     _missing.append("qiskit.primitives.Estimator")
 
-if _missing:
-    # Stop here—no fallback—so the frontend cannot show the “classical baseline” message again.
-    raise ImportError(
-        "Missing required Qiskit components: "
-        + ", ".join(_missing)
-        + ". Install with:\n"
-        "  pip install qiskit qiskit-algorithms qiskit-machine-learning\n"
-        "and run the backend in the SAME virtual environment."
-    )
+# === ROBUST QISKIT IMPORT CHECK (replace the old block) ===
+try:
+    from qiskit_algorithms.utils import algorithm_globals  # New location (Qiskit 1.1+)
+except ImportError:
+    try:
+        from qiskit.utils import algorithm_globals  # Old location (legacy)
+    except ImportError:
+        raise ImportError(
+            "Missing required Qiskit components: algorithm_globals "
+            "(qiskit.utils or qiskit_algorithms.utils). Install with:\n"
+            "  pip install qiskit qiskit-algorithms qiskit-machine-learning\n"
+            "and run the backend in the SAME virtual environment."
+        )
 
 # ---------------- scikit-learn utilities ----------------
 from sklearn.model_selection import train_test_split
