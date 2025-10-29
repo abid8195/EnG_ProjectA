@@ -4,177 +4,213 @@ import os
 import numpy as np
 import pandas as pd
 
-# ---------------- Robust Qiskit imports with explicit errors ----------------
-_missing = []
-
-# algorithm_globals (seed RNG)
+# ---------------- Robust Qiskit imports (algorithm_globals supports both locations) ----------------
 try:
-    from qiskit.utils import algorithm_globals  # qiskit>=1.x
-    ALG_SRC = "qiskit.utils"
+    from qiskit_algorithms.utils import algorithm_globals  # preferred in newer installs
 except Exception:
-    try:
-        from qiskit_algorithms.utils import algorithm_globals  # older split
-        ALG_SRC = "qiskit_algorithms.utils"
-    except Exception:
-        ALG_SRC = None
-        _missing.append("algorithm_globals (qiskit.utils or qiskit_algorithms.utils)")
+    from qiskit.utils import algorithm_globals  # legacy location
 
-# COBYLA optimizer
+from qiskit.primitives import Estimator
 try:
-    from qiskit.algorithms.optimizers import COBYLA
-    OPT_SRC = "qiskit.algorithms.optimizers"
+    from qiskit.algorithms.optimizers import COBYLA  # qiskit>=0.46 style
 except Exception:
-    try:
-        from qiskit_algorithms.optimizers import COBYLA
-        OPT_SRC = "qiskit_algorithms.optimizers"
-    except Exception:
-        OPT_SRC = None
-        _missing.append("COBYLA (qiskit.algorithms.optimizers or qiskit_algorithms.optimizers)")
+    from qiskit_algorithms.optimizers import COBYLA  # fallback
 
-# qiskit-machine-learning
-try:
-    from qiskit_machine_learning.neural_networks import EstimatorQNN
-    from qiskit_machine_learning.algorithms.classifiers import NeuralNetworkClassifier
-    from qiskit_machine_learning.circuit.library import QNNCircuit
-    QML_SRC = "qiskit_machine_learning"
-except Exception:
-    QML_SRC = None
-    _missing.append("qiskit-machine-learning (EstimatorQNN / NeuralNetworkClassifier / QNNCircuit)")
-
-# Estimator primitive
-try:
-    from qiskit.primitives import Estimator
-except Exception:
-    Estimator = None
-    _missing.append("qiskit.primitives.Estimator")
-
-# === ROBUST QISKIT IMPORT CHECK (replace the old block) ===
-try:
-    from qiskit_algorithms.utils import algorithm_globals  # New location (Qiskit 1.1+)
-except ImportError:
-    try:
-        from qiskit.utils import algorithm_globals  # Old location (legacy)
-    except ImportError:
-        raise ImportError(
-            "Missing required Qiskit components: algorithm_globals "
-            "(qiskit.utils or qiskit_algorithms.utils). Install with:\n"
-            "  pip install qiskit qiskit-algorithms qiskit-machine-learning\n"
-            "and run the backend in the SAME virtual environment."
-        )
+from qiskit_machine_learning.neural_networks import EstimatorQNN
+from qiskit_machine_learning.algorithms.classifiers import NeuralNetworkClassifier
+from qiskit.circuit.library import ZZFeatureMap, RealAmplitudes
 
 # ---------------- scikit-learn utilities ----------------
 from sklearn.model_selection import train_test_split
-from sklearn import datasets
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
-def _build_dataset(ds: Dict[str, Any]):
-    """
-    Return X_train, X_test, y_train, y_test based on dataset spec.
-    """
-    seed = int(ds.get("seed", 42))
+
+def _validate_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
+    required_paths = [
+        ("pipeline", None),
+        ("qnn.type", None),
+        ("dataset.type", None),
+        ("dataset.path", None),
+        ("dataset.label_column", None),
+        ("dataset.feature_columns", None),
+        ("circuit.num_qubits", None),
+        ("circuit.reps", None),
+        ("optimizer.type", None),
+        ("optimizer.maxiter", None),
+    ]
+
+    def _get(d: Dict[str, Any], dotted: str):
+        cur = d
+        for key in dotted.split("."):
+            if not isinstance(cur, dict) or key not in cur:
+                return None
+            cur = cur[key]
+        return cur
+
+    missing = [p for p, _ in required_paths if _get(spec, p) is None]
+    if missing:
+        return {"error": f"Missing required spec keys: {missing}", "received_spec": spec}
+    if spec.get("pipeline") != "qml-classifier":
+        return {"error": "pipeline must be 'qml-classifier'", "received_spec": spec}
+    if spec.get("qnn", {}).get("type") != "estimator":
+        return {"error": "qnn.type must be 'estimator'", "received_spec": spec}
+    if spec.get("dataset", {}).get("type") != "csv":
+        return {"error": "dataset.type must be 'csv'", "received_spec": spec}
+    if spec.get("optimizer", {}).get("type", "").lower() != "cobyla":
+        return {"error": "optimizer.type must be 'cobyla'", "received_spec": spec}
+    return {}
+
+
+def _resolve_csv_path(csv_path: str) -> str:
+    if os.path.isabs(csv_path):
+        return csv_path
+    here = os.path.dirname(__file__)
+    candidate1 = os.path.join(here, csv_path)
+    if os.path.exists(candidate1):
+        return candidate1
+    project_root = os.path.abspath(os.path.join(here, os.pardir))
+    candidate2 = os.path.join(project_root, csv_path)
+    return candidate2
+
+
+def _load_and_prepare_data(ds: Dict[str, Any], target_dimension: int, seed: int):
     algorithm_globals.random_seed = seed
+
+    path = ds.get("path")
+    label_col = ds.get("label_column")
+    feat_cols = ds.get("feature_columns") or []
     test_size = float(ds.get("test_size", 0.2))
-    if not (0.05 <= test_size <= 0.5):
-        test_size = 0.2
+    shuffle = bool(ds.get("shuffle", True))
 
-    kind = ds.get("type", "synthetic-line")
+    if not path or not label_col or not feat_cols:
+        raise ValueError("dataset.path, dataset.label_column, and dataset.feature_columns are required")
 
-    if kind == "synthetic-line":
-        n = int(ds.get("num_samples", 24))
-        d = int(ds.get("num_features", 2))
-        X = 2 * algorithm_globals.random.random([n, d]) - 1
-        y = (np.sum(X, axis=1) >= 0).astype(int) * 2 - 1  # -1/+1
-        return train_test_split(X, y, test_size=test_size, random_state=seed)
+    csv_path = _resolve_csv_path(path)
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f"CSV not found: {csv_path}")
 
-    elif kind == "iris":
-        iris = datasets.load_iris()
-        X_all, y_all = iris.data, iris.target
-        feat_idx = ds.get("features", [0, 1, 2, 3])  # can be narrowed by UI
-        classes = ds.get("classes", [0, 1])         # binary for this demo
-        mask = np.isin(y_all, classes)
-        X = X_all[mask][:, feat_idx]
-        y_raw = y_all[mask]
-        y = (y_raw == max(classes)).astype(int) * 2 - 1
-        return train_test_split(X, y, test_size=test_size, random_state=seed)
+    df = pd.read_csv(csv_path)
+    if df.empty:
+        raise ValueError("CSV appears to be empty")
+    for c in [label_col, *feat_cols]:
+        if c not in df.columns:
+            raise ValueError(f"Column '{c}' not found in CSV headers: {df.columns.tolist()}")
 
-    elif kind == "csv":
-        csv_path = ds.get("path")
-        if not csv_path:
-            raise ValueError("dataset.path is required for CSV")
+    X_raw = df[feat_cols].to_numpy()
+    y_raw = df[label_col].to_numpy()
 
-        # Allow relative path like 'uploads/file.csv' from app.py
-        if not os.path.isabs(csv_path):
-            csv_path = os.path.join(os.path.dirname(__file__), csv_path)
+    # Multiclass -> pick two most frequent classes (one-vs-one simplification)
+    unique, counts = np.unique(y_raw, return_counts=True)
+    if len(unique) > 2:
+        order = np.argsort(counts)[::-1]
+        keep = set(unique[order][:2])
+        mask = np.isin(y_raw, list(keep))
+        X_raw = X_raw[mask]
+        y_raw = y_raw[mask]
 
-        if not os.path.exists(csv_path):
-            raise FileNotFoundError(f"CSV not found: {csv_path}")
+    # Map labels to {-1, +1}
+    classes = np.unique(y_raw)
+    if len(classes) != 2:
+        raise ValueError(f"After filtering, need exactly 2 classes, got {classes.tolist()}")
+    major = classes[0]
+    if np.sum(y_raw == classes[1]) > np.sum(y_raw == classes[0]):
+        major = classes[1]
+    y_bin = np.where(y_raw == major, 1, -1)
 
-        df = pd.read_csv(csv_path)
-        if df.empty:
-            raise ValueError("CSV appears to be empty")
+    X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+        X_raw, y_bin, test_size=test_size, shuffle=shuffle, random_state=seed
+    )
 
-        # throttle rows to keep demo fast
-        df = df.sample(n=min(len(df), 50), random_state=seed)
+    # Preprocess: impute (median), scale, PCA to target_dimension
+    imputer = SimpleImputer(strategy="median")
+    scaler = StandardScaler()
+    pca = PCA(n_components=target_dimension, random_state=seed)
 
-        label_col = ds.get("label_column")
-        feat_cols = ds.get("feature_columns") or []
-        if not label_col:
-            raise ValueError("dataset.label_column is required for CSV")
-        for c in [label_col, *feat_cols]:
-            if c not in df.columns:
-                raise ValueError(f"Column '{c}' not in CSV headers: {df.columns.tolist()}")
+    X_train_imp = imputer.fit_transform(X_train_raw)
+    X_test_imp = imputer.transform(X_test_raw)
 
-        X = df[feat_cols].values
-        y = df[label_col].values
+    X_train_scl = scaler.fit_transform(X_train_imp)
+    X_test_scl = scaler.transform(X_test_imp)
 
-        # map labels to {-1,+1}
-        if y.dtype.kind in "biuf":
-            uniq = np.unique(y)
-            if set(uniq) <= {0, 1}:
-                y = np.where(y == 1, 1, -1)
-            else:
-                y = np.where(y > 0, 1, -1)
-        else:
-            classes = np.unique(y)
-            if len(classes) != 2:
-                raise ValueError(f"CSV label must be binary; got {classes.tolist()}")
-            y = np.where(y == classes.max(), 1, -1)
-
-        return train_test_split(X, y, test_size=test_size, random_state=seed)
-
+    # If features < target_dimension, PCA will fail; handle by padding
+    if X_train_scl.shape[1] >= target_dimension:
+        X_train = pca.fit_transform(X_train_scl)
+        X_test = pca.transform(X_test_scl)
     else:
-        raise ValueError(f"Unknown dataset type: {kind}")
+        # Pad with zeros to reach target_dimension
+        def _pad(X):
+            if X.shape[1] == target_dimension:
+                return X
+            pad = target_dimension - X.shape[1]
+            return np.hstack([X, np.zeros((X.shape[0], pad))])
+        X_train = _pad(X_train_scl)
+        X_test = _pad(X_test_scl)
+
+    shapes = {
+        "X_train": list(X_train.shape),
+        "X_test": list(X_test.shape),
+    }
+
+    preprocessors = {
+        "imputer": imputer,
+        "scaler": scaler,
+        "pca": pca,
+    }
+
+    return X_train, X_test, y_train, y_test, shapes, preprocessors
+
 
 def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Quantum pipeline using QNNCircuit + EstimatorQNN + COBYLA.
-    No classical fallback. If imports are missing, ImportError was already raised at import time.
-    """
-    Xtr, Xte, ytr, yte = _build_dataset(spec.get("dataset", {}))
+    # Validate spec
+    err = _validate_spec(spec or {})
+    if err:
+        return err
 
-    # num_qubits = number of features (simple Sprint-1 rule)
-    num_qubits = Xtr.shape[1]
+    # Seed for determinism
+    algorithm_globals.random_seed = 42
 
-    # QNNCircuit includes ZZFeatureMap + RealAmplitudes
-    qc = QNNCircuit(num_qubits=num_qubits)
+    ds = spec.get("dataset", {})
+    circ = spec.get("circuit", {})
+    opt = spec.get("optimizer", {})
+    outputs = spec.get("outputs", {})
 
-    if spec.get("qnn", {}).get("type", "estimator") != "estimator":
-        raise ValueError("Only qnn.type='estimator' is supported in Sprint-1")
+    num_qubits = int(circ.get("num_qubits"))
+    reps = int(circ.get("reps"))
+    maxiter = int(opt.get("maxiter", 50))
 
-    qnn = EstimatorQNN(circuit=qc, estimator=Estimator())
+    # Load and preprocess
+    try:
+        Xtr, Xte, ytr, yte, shapes, _pp = _load_and_prepare_data(ds, num_qubits, seed=42)
+    except Exception as e:
+        return {"error": str(e), "received_spec": spec}
 
-    requested = int(spec.get("optimizer", {}).get("maxiter", 60))
-    maxiter = max(1, min(requested, 20))  # keep demo snappy
-    clf = NeuralNetworkClassifier(qnn, optimizer=COBYLA(maxiter=maxiter))
+    # Build feature encoding + trainable ansatz
+    feature_map = ZZFeatureMap(feature_dimension=num_qubits, reps=1)
+    ansatz = RealAmplitudes(num_qubits=num_qubits, reps=reps, entanglement="full")
+
+    # Estimator QNN + classifier
+    qnn = EstimatorQNN(feature_map=feature_map, ansatz=ansatz, estimator=Estimator())
+    clf = NeuralNetworkClassifier(neural_network=qnn, optimizer=COBYLA(maxiter=maxiter))
 
     clf.fit(Xtr, ytr)
     acc = float(clf.score(Xte, yte))
 
-    out = {
+    result = {
+        "message": "Training complete",
         "accuracy": acc,
-        "n_train": int(len(Xtr)),
-        "n_test": int(len(Xte)),
-        "spec_echo": spec,
+        "shapes": shapes,
+        "num_qubits": num_qubits,
+        "reps": reps,
     }
-    if spec.get("outputs", {}).get("return_predictions", True):
-        out["predictions"] = clf.predict(Xte).tolist()[:20]
-    return out
+
+    if bool(outputs.get("return_predictions", True)):
+        preds = clf.predict(Xte)
+        preview_n = min(10, len(preds))
+        result["predictions_preview"] = {
+            "y_true": np.asarray(yte[:preview_n]).tolist(),
+            "y_pred": np.asarray(preds[:preview_n]).tolist(),
+        }
+
+    return result

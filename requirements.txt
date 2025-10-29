@@ -1,3 +1,14 @@
+# Install dependencies with: python -m pip install -r requirements.txt
+
+flask
+flask-cors
+qiskit
+qiskit-algorithms
+qiskit-machine-learning
+qiskit-aer
+scikit-learn
+numpy
+pandas
 flask
 flask-cors
 pytest

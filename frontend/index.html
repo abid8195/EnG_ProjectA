@@ -133,6 +133,24 @@
       <div id="msg" class="note" style="margin-top:4px;"></div>
       <pre id="result" aria-live="polite"></pre>
 
+      <!-- Minimal controls for CSV QML run (non-destructive to existing UI) -->
+      <div class="panel" style="margin-top:12px">
+        <h3>Quick Run</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <input id="upload" type="file" accept=".csv" />
+          <select id="labelCol" title="Label column"></select>
+          <div id="featureCols" title="Feature columns"></div>
+          <label for="testSize">Test size</label>
+          <input id="testSize" type="number" step="0.05" min="0.1" max="0.5" value="0.2" style="width:80px" />
+          <label for="numQubits">num_qubits</label>
+          <input id="numQubits" type="number" min="2" value="4" style="width:80px" />
+          <button type="button" class="btn primary" id="run">Run Pipeline</button>
+          <form method="GET" action="http://localhost:5000/instructions" style="display:inline">
+            <button type="submit" class="btn" id="seeInstructions">See Instructions</button>
+          </form>
+        </div>
+      </div>
+
       <h3>Generated Code Template</h3>
       <pre id="codePreview" style="background:#111;color:#cfc;padding:8px;overflow:auto;height:260px;"></pre>
       <div style="margin-top:8px"><button type="button" class="btn" id="btn-download-code">Download Code (py)</button></div>
