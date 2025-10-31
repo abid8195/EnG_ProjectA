@@ -7,9 +7,9 @@ on:
     branches: [ main ]
 
 env:
-  AZURE_WEBAPP_NAME: qml-dataflow-studio-yourname    # CHANGE THIS: Replace 'yourname' with your actual name
-  AZURE_WEBAPP_PACKAGE_PATH: '.'           # set this to the path to your web app project
-  PYTHON_VERSION: '3.11'                   # set this to the Python version to use
+  AZURE_WEBAPP_NAME: qml-dataflow-studio-abid    # Replace 'abid' with your chosen name
+  AZURE_WEBAPP_PACKAGE_PATH: '.'           
+  PYTHON_VERSION: '3.11'
 
 jobs:
   build-and-test:
