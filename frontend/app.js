@@ -31,7 +31,6 @@
   let selectedId = null;
   let nextX=20, nextY=20, nextId=1;
   let pendingSource = null; // for click–click wiring
-  let lastUpload = null; // { ok, path, columns, preview }
 
   // SPEC used by backend / codegen
   const spec = {
@@ -82,10 +81,24 @@
       const d = `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`;
       path.setAttribute("d", d);
       path.setAttribute("fill", "none");
-      path.setAttribute("stroke", "#111");
-      path.setAttribute("stroke-width", "2");
+      path.setAttribute("stroke", "#2563eb");
+      path.setAttribute("stroke-width", "3");
       path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-dasharray", "none");
+      path.style.filter = "drop-shadow(0 1px 2px rgba(0,0,0,0.1))";
+      
+      // Add a subtle animation on creation
+      path.style.strokeDasharray = "10,5";
+      path.style.strokeDashoffset = "15";
+      path.style.animation = "dash 0.5s linear forwards";
+      
       svg.appendChild(path);
+      
+      // Remove animation after it completes
+      setTimeout(() => {
+        path.style.strokeDasharray = "none";
+        path.style.animation = "none";
+      }, 500);
     });
   }
 
@@ -358,25 +371,68 @@ qnn = EstimatorQNN(qc)
       setMsg("Loaded Iris sample.", "ok");
     });
 
-    async function doUpload(file){
-      const result = $("result");
+    // Dataset selection buttons
+    async function loadDataset(datasetName) {
       try {
-        if (!file) throw new Error("Choose a .csv first.");
-        if (!file.name.toLowerCase().endsWith(".csv")) throw new Error("Only .csv files allowed.");
+        setMsg(`Loading ${datasetName} dataset...`);
+        const resp = await fetch(`http://localhost:5000/dataset/${datasetName}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data?.error || resp.statusText);
+
+        // Update SPEC for backend
+        spec.dataset = { 
+          type: "csv", 
+          path: data.path, 
+          label_column: data.label_column, 
+          feature_columns: data.feature_columns, 
+          test_size: 0.2, 
+          seed: 42 
+        };
+        spec.circuit.num_qubits = Math.max(1, Math.min(data.feature_columns.length, 4));
+
+        // Create/update Dataset node on canvas
+        let ds = model.nodes.find(n => (n.type||"").toLowerCase()==="dataset");
+        if (!ds) {
+          ds = {
+            id: nextId++, type:"dataset", name:"Dataset",
+            pos:{ x:20, y:20 },
+            params:{ path: data.path, label: data.label_column, features: data.feature_columns.join(", ") }
+          };
+          model.nodes.push(ds);
+        } else {
+          ds.params.path = data.path;
+          ds.params.label = data.label_column;
+          ds.params.features = data.feature_columns.join(", ");
+        }
+
+        render(); selectNode(ds.id);
+        result.textContent = JSON.stringify({ dataset: data.name, config: data }, null, 2);
+        setMsg(`${datasetName} dataset loaded successfully!`, "ok");
+      } catch (e) { 
+        setMsg(e.message || String(e), "err"); 
+      }
+    }
+
+    on("btn-diabetes", () => loadDataset("diabetes"));
+    on("btn-iris", () => loadDataset("iris"));
+    on("btn-realestate", () => loadDataset("realestate"));
+
+    on("btn-upload", async () => {
+      try {
+        const fileEl = $("csvFile");
+        const f = fileEl?.files?.[0]; if (!f) return setMsg("Choose a .csv first.","err");
+        if (!f.name.toLowerCase().endsWith(".csv")) return setMsg("Only .csv files allowed.","err");
         setMsg("Uploading CSV…");
-        const form = new FormData(); form.append("file", file);
+        const form = new FormData(); form.append("file", f);
         const resp = await fetch("http://localhost:5000/upload", { method:"POST", body: form });
         const j = await resp.json(); if (!resp.ok) throw new Error(j?.error || resp.statusText);
 
-        lastUpload = j; // store
-        populateSelectorsFromUpload(j);
-
         const { label, features } = inferLabelAndFeatures(j.columns || []);
-        // Update SPEC for legacy run path as well
+        // Update SPEC for backend
         spec.dataset = { type:"csv", path:j.path, label_column:label, feature_columns:features, test_size:0.2, seed:42 };
         spec.circuit.num_qubits = Math.max(1, Math.min(features.length, 4));
 
-        // Update Dataset node if present
+        // Update a Dataset node on canvas (first one found)
         const ds = model.nodes.find(n => (n.type||"").toLowerCase()==="dataset") || null;
         if (ds) {
           ds.params.path = j.path || "";
@@ -385,19 +441,8 @@ qnn = EstimatorQNN(qc)
           if (selectedId === ds.id) selectNode(ds.id); else render();
         }
 
-        result && (result.textContent = JSON.stringify({ upload:j, chosen:{label, features} }, null, 2));
+        result.textContent = JSON.stringify({ upload:j, chosen:{label, features} }, null, 2);
         setMsg(`Upload OK. Label=${label}; #features=${features.length}.`,"ok");
-      } catch (e) {
-        setMsg(e.message || String(e), "err");
-        result && (result.textContent = "");
-      }
-    }
-
-    on("btn-upload", async () => {
-      try {
-        const fileEl = $("csvFile");
-        const f = fileEl?.files?.[0]; if (!f) return setMsg("Choose a .csv first.","err");
-        await doUpload(f);
         // Keep fileEl.value intact; clearing it is optional.
       } catch (e) { setMsg(e.message || String(e), "err"); }
     });
@@ -408,55 +453,6 @@ qnn = EstimatorQNN(qc)
       let li = lower.findIndex(c => candidates.includes(c));
       if (li === -1) li = cols.length - 1;
       return { label: cols[li] || "", features: cols.filter((_,i) => i !== li) };
-    }
-
-    function populateSelectorsFromUpload(upload){
-      if (!upload || !Array.isArray(upload.columns)) return;
-      const labelSel = $("labelCol");
-      const featsDiv = $("featureCols");
-      if (!labelSel && !featsDiv) return; // UI not present
-      const cols = upload.columns.slice();
-      // label select
-      if (labelSel){
-        labelSel.innerHTML = "";
-        cols.forEach((c, idx) => {
-          const opt = document.createElement("option");
-          opt.value = c; opt.textContent = c;
-          if (idx === cols.length - 1) opt.selected = true;
-          labelSel.appendChild(opt);
-        });
-      }
-      // features checkboxes (default all except label)
-      if (featsDiv){
-        featsDiv.innerHTML = "";
-        const defaultLabel = cols[cols.length - 1];
-        cols.forEach((c) => {
-          const id = `feat_${c.replace(/[^a-zA-Z0-9_\-]/g,'_')}`;
-          const wrap = document.createElement("label");
-          wrap.style.marginRight = "6px";
-          const cb = document.createElement("input");
-          cb.type = "checkbox"; cb.value = c; cb.id = id; cb.checked = (c !== defaultLabel);
-          const txt = document.createTextNode(" " + c);
-          wrap.appendChild(cb); wrap.appendChild(txt);
-          featsDiv.appendChild(wrap);
-        });
-      }
-    }
-
-    function getSelectedFeatures(){
-      const featsDiv = $("featureCols");
-      if (!featsDiv) return [];
-      const cbs = featsDiv.querySelectorAll('input[type="checkbox"]');
-      return Array.from(cbs).filter(x => x.checked).map(x => x.value);
-    }
-
-    // New quick-run upload input
-    const quickUpload = $("upload");
-    if (quickUpload){
-      quickUpload.addEventListener("change", async (ev) => {
-        const f = ev.target.files && ev.target.files[0];
-        if (f) await doUpload(f);
-      });
     }
 
     on("btn-generate", () => {
@@ -529,63 +525,5 @@ qnn = EstimatorQNN(qc)
         setMsg("Pipeline finished.","ok");
       } catch (e) { setMsg(e.message || String(e), "err"); $("result").textContent = ""; }
     });
-
-    // New quick Run Pipeline button
-    const quickRunBtn = $("run");
-    if (quickRunBtn){
-      quickRunBtn.addEventListener("click", async (e) => {
-        e.preventDefault(); e.stopPropagation();
-        try {
-          const resultBox = $("result");
-          resultBox && (resultBox.textContent = "Running…");
-          if (!lastUpload || !lastUpload.path) throw new Error("Upload a CSV first.");
-          const labelSel = $("labelCol");
-          const label = labelSel ? labelSel.value : null;
-          const features = getSelectedFeatures();
-          const testSizeEl = $("testSize");
-          const numQEl = $("numQubits");
-          const testSize = testSizeEl ? Number(testSizeEl.value || 0.2) : 0.2;
-          const numQ = numQEl ? Number(numQEl.value || 4) : 4;
-
-          const runSpec = {
-            pipeline: "qml-classifier",
-            qnn: { type: "estimator" },
-            dataset: { type: "csv", path: lastUpload.path, label_column: label, feature_columns: features, test_size: testSize, shuffle: true },
-            circuit: { type: "realamplitudes", num_qubits: numQ, reps: 1 },
-            optimizer: { type: "cobyla", maxiter: 50 },
-            outputs: { return_predictions: true }
-          };
-
-          const resp = await fetch("http://localhost:5000/run", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(runSpec)
-          });
-          const data = await resp.json();
-          if (!resp.ok) throw new Error(data?.error || resp.statusText);
-          resultBox && (resultBox.textContent = JSON.stringify(data, null, 2));
-          setMsg("Pipeline finished.", "ok");
-        } catch (err) {
-          setMsg(err.message || String(err), "err");
-          const resultBox = $("result"); resultBox && (resultBox.textContent = "");
-        }
-      });
-    }
-
-    // See Instructions handler: download text from backend
-    const seeBtn = $("seeInstructions");
-    if (seeBtn){
-      seeBtn.addEventListener("click", async (e) => {
-        // If wrapped in a form, default submit will handle download; also provide fetch fallback
-        try {
-          const resp = await fetch("http://localhost:5000/instructions");
-          const blob = await resp.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url; a.download = "QML_Pipeline_Instructions.txt";
-          document.body.appendChild(a); a.click(); a.remove();
-          URL.revokeObjectURL(url);
-        } catch (_) { /* ignore */ }
-      });
-    }
   });
 })();

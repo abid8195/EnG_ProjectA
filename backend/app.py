@@ -2,6 +2,8 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import traceback
+import os
+import pandas as pd
 
 # IMPORTANT: we use runner.py which REQUIRES qiskit packages.
 from runner import run_pipeline  # raises ImportError with a clear message if Qiskit missing
@@ -54,9 +56,9 @@ def run():
     try:
         spec = request.get_json(force=True)
         out = run_pipeline(spec)
-        if isinstance(out, dict) and out.get("error"):
-            return jsonify({"status": "error", "error": out.get("error"), "received_spec": out.get("received_spec", spec)}), 400
-        return jsonify({"status": "ok", "result": out})
+        # Make it explicit that this is the quantum path (no 'note' key anymore)
+        out["status"] = "ok"
+        return jsonify(out)
     except ImportError as e:
         # Surface exactly which modules are missing
         return jsonify({
@@ -72,44 +74,63 @@ def run():
             "trace": traceback.format_exc()
         }), 500
 
-@app.route("/instructions", methods=["GET"])
-def instructions():
+@app.route("/dataset/<dataset_name>", methods=["GET"])
+def get_dataset(dataset_name):
     """
-    Return a downloadable plain-text instruction file for using the CSV QML pipeline.
+    Get predefined dataset information.
     """
-    from flask import make_response
-    lines = []
-    lines.append("QML Pipeline Instructions\n")
-    lines.append("==========================\n\n")
-    lines.append("Required dataset format:\n")
-    lines.append("- CSV with a header row.\n")
-    lines.append("- Numeric feature columns (non-numeric will be rejected or imputed as NaN).\n")
-    lines.append("- One label column (string or numeric). Multiclass is temporarily reduced to two most frequent classes.\n\n")
-    lines.append("How to use the UI (step-by-step):\n")
-    lines.append("1) Upload your CSV via the Upload panel. The server saves it under backend/uploads.\n")
-    lines.append("2) Choose label_column and feature_columns from the detected headers.\n")
-    lines.append("3) Select num_qubits (the model will apply PCA to match this dimension).\n")
-    lines.append("4) Pick reps for the RealAmplitudes ansatz and COBYLA max iterations.\n")
-    lines.append("5) Click Run. The backend will train an EstimatorQNN and return accuracy and a small predictions preview.\n\n")
-    lines.append("Preprocessing notes:\n")
-    lines.append("- Missing values are imputed with median (per feature).\n")
-    lines.append("- Features are standardized with StandardScaler.\n")
-    lines.append("- PCA reduces/aligns feature dimension to num_qubits. If features < num_qubits, the model pads with zeros.\n")
-    lines.append("- Multiclass datasets are simplified to a one-vs-one on the two most frequent classes.\n")
-    lines.append("- Deterministic seed: algorithm_globals.random_seed = 42.\n\n")
-    lines.append("Sample datasets and columns:\n")
-    lines.append("- diabetes_small.csv: label 'Outcome'; example features ['Pregnancies','Glucose','BloodPressure','SkinThickness','Insulin','BMI','DiabetesPedigreeFunction','Age']\n")
-    lines.append("- iris_like.csv: label 'species'; example features ['sepal_length','sepal_width','petal_length','petal_width']\n")
-    lines.append("- wine_small.csv: label 'quality_label'; example features ['fixed_acidity','volatile_acidity','citric_acid','residual_sugar','chlorides','free_sulfur_dioxide','total_sulfur_dioxide','density','pH','sulphates','alcohol']\n\n")
-    lines.append("Outputs:\n")
-    lines.append("- On success: {\"message\": \"Training complete\", \"accuracy\": <float>, \"predictions_preview\": {y_true, y_pred}, shapes, num_qubits, reps}.\n")
-    lines.append("- On error: HTTP 400 with {\"error\": <message>, \"received_spec\": {...}}.\n")
-
-    content = "".join(lines)
-    resp = make_response(content)
-    resp.headers["Content-Type"] = "text/plain; charset=utf-8"
-    resp.headers["Content-Disposition"] = "attachment; filename=instructions.txt"
-    return resp
+    try:
+        dataset_configs = {
+            "diabetes": {
+                "path": "datasets/diabetes.csv",
+                "label_column": "outcome",
+                "feature_columns": ["pregnancies", "glucose", "bloodpressure", "bmi", "age"],
+                "description": "Diabetes prediction dataset"
+            },
+            "iris": {
+                "path": "datasets/iris.csv", 
+                "label_column": "species",
+                "feature_columns": ["sepal_length", "sepal_width", "petal_length", "petal_width"],
+                "description": "Iris flower classification dataset"
+            },
+            "realestate": {
+                "path": "datasets/realestate.csv",
+                "label_column": "price_high", 
+                "feature_columns": ["size", "bedrooms", "bathrooms", "age", "location_score"],
+                "description": "Real estate price prediction dataset"
+            }
+        }
+        
+        if dataset_name not in dataset_configs:
+            return jsonify({"error": f"Unknown dataset: {dataset_name}"}), 400
+            
+        config = dataset_configs[dataset_name]
+        dataset_path = os.path.join(os.path.dirname(__file__), config["path"])
+        
+        if not os.path.exists(dataset_path):
+            return jsonify({"error": f"Dataset file not found: {config['path']}"}), 404
+            
+        # Read the dataset to get columns and preview
+        df = pd.read_csv(dataset_path)
+        cols = df.columns.tolist()
+        preview_rows = min(len(df), 5)
+        
+        return jsonify({
+            "ok": True,
+            "name": dataset_name,
+            "path": config["path"],
+            "label_column": config["label_column"],
+            "feature_columns": config["feature_columns"],
+            "columns": cols,
+            "description": config["description"],
+            "preview": df.head(preview_rows).to_dict(orient="records")
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to load dataset: {e}",
+            "trace": traceback.format_exc()
+        }), 500
 
 if __name__ == "__main__":
     # Bind to all interfaces so your frontend at http://localhost:8000 can reach it.
