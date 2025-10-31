@@ -426,6 +426,7 @@ qnn = EstimatorQNN(qc)
     on("btn-diabetes", () => loadDataset("diabetes"));
     on("btn-iris", () => loadDataset("iris"));
     on("btn-realestate", () => loadDataset("realestate"));
+    on("btn-mnist", () => loadDataset("mnist_subset"));
 
     on("btn-upload", async () => {
       try {
@@ -535,5 +536,85 @@ qnn = EstimatorQNN(qc)
         setMsg("Pipeline finished.","ok");
       } catch (e) { setMsg(e.message || String(e), "err"); $("result").textContent = ""; }
     });
+
+    // SysML Block Diagram Toggle
+    on("btn-toggle-sysml", () => {
+      const sysmlView = $("sysml-view");
+      const canvasView = $("canvas");
+      const toggleBtn = $("btn-toggle-sysml");
+      
+      if (sysmlView.style.display === "none") {
+        sysmlView.style.display = "block";
+        canvasView.style.display = "none";
+        toggleBtn.textContent = "Canvas View";
+        updateSysMLBlocks();
+        setMsg("Switched to SysML Block Diagram view", "ok");
+      } else {
+        sysmlView.style.display = "none";
+        canvasView.style.display = "block";
+        toggleBtn.textContent = "SysML Block View";
+        setMsg("Switched to Canvas view", "ok");
+      }
+    });
+
+    // Update SysML blocks based on current model
+    function updateSysMLBlocks() {
+      const dataBlock = $("sysml-datablock");
+      const encoderBlock = $("sysml-encoderblock");
+      const circuitBlock = $("sysml-circuitblock");
+      const optimizerBlock = $("sysml-optimizerblock");
+      const outputBlock = $("sysml-outputblock");
+
+      // Find relevant nodes in current model
+      const nodes = model.nodes || [];
+      
+      nodes.forEach(node => {
+        if (node.type === "dataset" && dataBlock) {
+          const props = dataBlock.querySelector(".sysml-properties");
+          props.innerHTML = `
+            <div class="sysml-property">dataset_type: ${node.params?.type || "iris"}</div>
+            <div class="sysml-property">test_size: ${node.params?.test_size || "0.2"}</div>
+            <div class="sysml-property">seed: ${node.params?.seed || "42"}</div>
+          `;
+          dataBlock.classList.add("active");
+        }
+        
+        if (node.type === "encoder" && encoderBlock) {
+          const props = encoderBlock.querySelector(".sysml-properties");
+          props.innerHTML = `
+            <div class="sysml-property">encoding_type: ${node.params?.type || "angle"}</div>
+            <div class="sysml-property">n_qubits: ${node.params?.n_qubits || "4"}</div>
+          `;
+          encoderBlock.classList.add("active");
+        }
+        
+        if (node.type === "circuit" && circuitBlock) {
+          const props = circuitBlock.querySelector(".sysml-properties");
+          props.innerHTML = `
+            <div class="sysml-property">ansatz_type: ${node.params?.ansatz || "ry"}</div>
+            <div class="sysml-property">num_layers: ${node.params?.layers || "2"}</div>
+          `;
+          circuitBlock.classList.add("active");
+        }
+        
+        if (node.type === "optimizer" && optimizerBlock) {
+          const props = optimizerBlock.querySelector(".sysml-properties");
+          props.innerHTML = `
+            <div class="sysml-property">optimizer_type: ${node.params?.type || "cobyla"}</div>
+            <div class="sysml-property">max_iterations: ${node.params?.maxiter || "100"}</div>
+          `;
+          optimizerBlock.classList.add("active");
+        }
+        
+        if (node.type === "output" && outputBlock) {
+          const props = outputBlock.querySelector(".sysml-properties");
+          props.innerHTML = `
+            <div class="sysml-property">return_predictions: ${node.params?.return_predictions !== false}</div>
+            <div class="sysml-property">metrics: ${node.params?.metrics || "accuracy"}</div>
+          `;
+          outputBlock.classList.add("active");
+        }
+      });
+    }
   });
 })();

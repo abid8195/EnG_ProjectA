@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QML Pipeline Debug Test</title>
+</head>
+<body>
+    <h1>QML Pipeline Debug Test</h1>
+    <div>
+        <button id="add-dataset">Add Dataset (Test)</button>
+        <button id="test-basic">Test Basic Function</button>
+        <div id="canvas" style="width: 500px; height: 300px; border: 1px solid #ccc; position: relative;">
+            <svg id="wires"></svg>
+        </div>
+        <div id="msg"></div>
+        <div id="selected-info">No selection</div>
+        <div id="node-params"></div>
+    </div>
+
+    <script>
+        console.log("Debug test starting...");
+        
+        // Test basic DOM access
+        const testBtn = document.getElementById('test-basic');
+        if (testBtn) {
+            testBtn.addEventListener('click', () => {
+                console.log("Basic button works!");
+                alert("Basic button clicked!");
+            });
+            console.log("Basic button handler attached");
+        } else {
+            console.error("Could not find test-basic button");
+        }
+
+        // Load the main app.js and test
+        const script = document.createElement('script');
+        script.src = 'app.js';
+        script.onload = () => {
+            console.log("app.js loaded");
+            
+            // Test the add-dataset button after a short delay
+            setTimeout(() => {
+                const addBtn = document.getElementById('add-dataset');
+                if (addBtn) {
+                    console.log("Add dataset button found, testing click...");
+                    addBtn.click();
+                } else {
+                    console.error("Add dataset button not found");
+                }
+            }, 500);
+        };
+        script.onerror = (e) => {
+            console.error("Failed to load app.js:", e);
+        };
+        document.head.appendChild(script);
+    </script>
+</body>
+</html>

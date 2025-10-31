@@ -91,13 +91,19 @@ def get_dataset(dataset_name):
                 "path": "datasets/iris.csv", 
                 "label_column": "species",
                 "feature_columns": ["sepal_length", "sepal_width", "petal_length", "petal_width"],
-                "description": "Iris flower classification dataset"
+                "description": "Iris flower classification dataset (binary: setosa vs versicolor)"
             },
             "realestate": {
                 "path": "datasets/realestate.csv",
                 "label_column": "price_high", 
                 "feature_columns": ["size", "bedrooms", "bathrooms", "age", "location_score"],
                 "description": "Real estate price prediction dataset"
+            },
+            "mnist_subset": {
+                "path": "datasets/mnist_subset.csv",
+                "label_column": "digit",
+                "feature_columns": ["pixel_" + str(i) for i in range(784)],
+                "description": "MNIST subset dataset (digits 0 vs 1, 1000 samples max) - SysML requirement"
             }
         }
         
