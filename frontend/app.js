@@ -8,6 +8,16 @@
 (function(){
   // ---------- helpers ----------
   const $ = (id) => document.getElementById(id);
+  
+  // Dynamic API base URL - works for both local development and Azure deployment
+  const getApiBaseUrl = () => {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:5000';
+    }
+    // For Azure deployment, use the same host but different port/path
+    return `${window.location.protocol}//${window.location.host}`;
+  };
+  
   const setMsg = (t, kind="info") => {
     const m = $("msg"); if (!m) return;
     m.textContent = t || "";
@@ -375,7 +385,7 @@ qnn = EstimatorQNN(qc)
     async function loadDataset(datasetName) {
       try {
         setMsg(`Loading ${datasetName} dataset...`);
-        const resp = await fetch(`http://localhost:5000/dataset/${datasetName}`);
+        const resp = await fetch(`${getApiBaseUrl()}/dataset/${datasetName}`);
         const data = await resp.json();
         if (!resp.ok) throw new Error(data?.error || resp.statusText);
 
@@ -424,7 +434,7 @@ qnn = EstimatorQNN(qc)
         if (!f.name.toLowerCase().endsWith(".csv")) return setMsg("Only .csv files allowed.","err");
         setMsg("Uploading CSV…");
         const form = new FormData(); form.append("file", f);
-        const resp = await fetch("http://localhost:5000/upload", { method:"POST", body: form });
+        const resp = await fetch(`${getApiBaseUrl()}/upload`, { method:"POST", body: form });
         const j = await resp.json(); if (!resp.ok) throw new Error(j?.error || resp.statusText);
 
         const { label, features } = inferLabelAndFeatures(j.columns || []);
@@ -516,7 +526,7 @@ qnn = EstimatorQNN(qc)
         setMsg(""); $("result").textContent = "Running…";
         spec.circuit.num_qubits = Math.max(1, Math.min(Number(spec.circuit.num_qubits||4), 4));
         spec.optimizer.maxiter  = Math.max(1, Math.min(Number(spec.optimizer.maxiter||15), 20));
-        const resp = await fetch("http://localhost:5000/run", {
+        const resp = await fetch(`${getApiBaseUrl()}/run`, {
           method:"POST", headers:{ "Content-Type":"application/json" },
           body: JSON.stringify(spec)
         });

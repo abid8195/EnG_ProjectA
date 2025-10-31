@@ -133,5 +133,8 @@ def get_dataset(dataset_name):
         }), 500
 
 if __name__ == "__main__":
-    # Bind to all interfaces so your frontend at http://localhost:8000 can reach it.
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    import os
+    # Get port from environment variable for Azure deployment
+    port = int(os.environ.get('PORT', 5000))
+    # Bind to all interfaces so your frontend can reach it
+    app.run(host="0.0.0.0", port=port, debug=False)

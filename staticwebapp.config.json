@@ -1,0 +1,50 @@
+{
+  "routes": [
+    {
+      "route": "/api/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/health",
+      "allowedRoles": ["anonymous"]  
+    },
+    {
+      "route": "/upload",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/run",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/dataset/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/*",
+      "serve": "/frontend/index.html",
+      "allowedRoles": ["anonymous"]
+    }
+  ],
+  "responseOverrides": {
+    "400": {
+      "rewrite": "/frontend/index.html"
+    },
+    "401": {
+      "rewrite": "/frontend/index.html"
+    },
+    "403": {
+      "rewrite": "/frontend/index.html"
+    },
+    "404": {
+      "rewrite": "/frontend/index.html"
+    }
+  },
+  "mimeTypes": {
+    ".json": "application/json",
+    ".js": "text/javascript",
+    ".css": "text/css",
+    ".html": "text/html",
+    ".csv": "text/csv"
+  }
+}
