@@ -2,6 +2,8 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import traceback
+import os
+import pandas as pd
 
 # IMPORTANT: we use runner.py which REQUIRES qiskit packages.
 from runner import run_pipeline  # raises ImportError with a clear message if Qiskit missing
@@ -69,6 +71,64 @@ def run():
         return jsonify({
             "status": "error",
             "error": str(e),
+            "trace": traceback.format_exc()
+        }), 500
+
+@app.route("/dataset/<dataset_name>", methods=["GET"])
+def get_dataset(dataset_name):
+    """
+    Get predefined dataset information.
+    """
+    try:
+        dataset_configs = {
+            "diabetes": {
+                "path": "datasets/diabetes.csv",
+                "label_column": "outcome",
+                "feature_columns": ["pregnancies", "glucose", "bloodpressure", "bmi", "age"],
+                "description": "Diabetes prediction dataset"
+            },
+            "iris": {
+                "path": "datasets/iris.csv", 
+                "label_column": "species",
+                "feature_columns": ["sepal_length", "sepal_width", "petal_length", "petal_width"],
+                "description": "Iris flower classification dataset"
+            },
+            "realestate": {
+                "path": "datasets/realestate.csv",
+                "label_column": "price_high", 
+                "feature_columns": ["size", "bedrooms", "bathrooms", "age", "location_score"],
+                "description": "Real estate price prediction dataset"
+            }
+        }
+        
+        if dataset_name not in dataset_configs:
+            return jsonify({"error": f"Unknown dataset: {dataset_name}"}), 400
+            
+        config = dataset_configs[dataset_name]
+        dataset_path = os.path.join(os.path.dirname(__file__), config["path"])
+        
+        if not os.path.exists(dataset_path):
+            return jsonify({"error": f"Dataset file not found: {config['path']}"}), 404
+            
+        # Read the dataset to get columns and preview
+        df = pd.read_csv(dataset_path)
+        cols = df.columns.tolist()
+        preview_rows = min(len(df), 5)
+        
+        return jsonify({
+            "ok": True,
+            "name": dataset_name,
+            "path": config["path"],
+            "label_column": config["label_column"],
+            "feature_columns": config["feature_columns"],
+            "columns": cols,
+            "description": config["description"],
+            "preview": df.head(preview_rows).to_dict(orient="records")
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to load dataset: {e}",
             "trace": traceback.format_exc()
         }), 500
 

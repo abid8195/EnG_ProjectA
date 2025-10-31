@@ -50,15 +50,39 @@
     #wires {
       position: absolute; inset: 0;
       pointer-events: none; /* wires don't block clicks */
+      z-index: 1;
+    }
+    .node {
+      z-index: 2;
+      position: relative;
+    }
+    .node .ports {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 6px 0;
+      padding: 4px 0;
     }
     .node .port {
-      width: 10px; height: 10px; border-radius: 50%;
+      width: 12px; height: 12px; border-radius: 50%;
       display: inline-block; vertical-align: middle;
-      margin: 0 6px; box-shadow: 0 0 0 2px #fff inset;
+      box-shadow: 0 0 0 2px #fff, 0 0 0 3px #666;
       cursor: crosshair;
+      position: relative;
+      z-index: 3;
+    }
+    .node .port:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 0 2px #fff, 0 0 0 3px #333;
     }
     .node .port.in  { background: #10b981; }  /* green */
     .node .port.out { background: #3b82f6; }  /* blue  */
+    
+    /* Wire animation */
+    @keyframes dash {
+      from { stroke-dashoffset: 15; }
+      to { stroke-dashoffset: 0; }
+    }
   </style>
 </head>
 <body>
@@ -111,10 +135,17 @@
       </div>
 
       <div class="panel" style="margin-top:12px">
+        <h3>Dataset Selection</h3>
+        <div style="margin-bottom: 10px;">
+          <button type="button" class="btn" id="btn-diabetes">Use Diabetes Dataset</button>
+          <button type="button" class="btn" id="btn-iris">Use Iris Dataset</button>
+          <button type="button" class="btn" id="btn-realestate">Use Real Estate Dataset</button>
+        </div>
+        
         <h3>Actions</h3>
-        <input type="file" id="csvFile" accept=".csv" />
-        <button type="button" class="btn" id="btn-upload">Upload CSV</button>
-        <button type="button" class="btn" id="btn-load-sample">Load Iris Sample</button>
+        <input type="file" id="csvFile" accept=".csv" style="display: none;" />
+        <button type="button" class="btn" id="btn-upload" style="display: none;">Upload CSV</button>
+        <button type="button" class="btn" id="btn-load-sample" style="display: none;">Load Iris Sample</button>
 
         <select id="select-encoding">
           <option value="angle">Angle Encoding</option>

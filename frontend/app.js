@@ -81,10 +81,24 @@
       const d = `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`;
       path.setAttribute("d", d);
       path.setAttribute("fill", "none");
-      path.setAttribute("stroke", "#111");
-      path.setAttribute("stroke-width", "2");
+      path.setAttribute("stroke", "#2563eb");
+      path.setAttribute("stroke-width", "3");
       path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-dasharray", "none");
+      path.style.filter = "drop-shadow(0 1px 2px rgba(0,0,0,0.1))";
+      
+      // Add a subtle animation on creation
+      path.style.strokeDasharray = "10,5";
+      path.style.strokeDashoffset = "15";
+      path.style.animation = "dash 0.5s linear forwards";
+      
       svg.appendChild(path);
+      
+      // Remove animation after it completes
+      setTimeout(() => {
+        path.style.strokeDasharray = "none";
+        path.style.animation = "none";
+      }, 500);
     });
   }
 
@@ -356,6 +370,52 @@ qnn = EstimatorQNN(qc)
       render(); selectNode(ds.id);
       setMsg("Loaded Iris sample.", "ok");
     });
+
+    // Dataset selection buttons
+    async function loadDataset(datasetName) {
+      try {
+        setMsg(`Loading ${datasetName} dataset...`);
+        const resp = await fetch(`http://localhost:5000/dataset/${datasetName}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data?.error || resp.statusText);
+
+        // Update SPEC for backend
+        spec.dataset = { 
+          type: "csv", 
+          path: data.path, 
+          label_column: data.label_column, 
+          feature_columns: data.feature_columns, 
+          test_size: 0.2, 
+          seed: 42 
+        };
+        spec.circuit.num_qubits = Math.max(1, Math.min(data.feature_columns.length, 4));
+
+        // Create/update Dataset node on canvas
+        let ds = model.nodes.find(n => (n.type||"").toLowerCase()==="dataset");
+        if (!ds) {
+          ds = {
+            id: nextId++, type:"dataset", name:"Dataset",
+            pos:{ x:20, y:20 },
+            params:{ path: data.path, label: data.label_column, features: data.feature_columns.join(", ") }
+          };
+          model.nodes.push(ds);
+        } else {
+          ds.params.path = data.path;
+          ds.params.label = data.label_column;
+          ds.params.features = data.feature_columns.join(", ");
+        }
+
+        render(); selectNode(ds.id);
+        result.textContent = JSON.stringify({ dataset: data.name, config: data }, null, 2);
+        setMsg(`${datasetName} dataset loaded successfully!`, "ok");
+      } catch (e) { 
+        setMsg(e.message || String(e), "err"); 
+      }
+    }
+
+    on("btn-diabetes", () => loadDataset("diabetes"));
+    on("btn-iris", () => loadDataset("iris"));
+    on("btn-realestate", () => loadDataset("realestate"));
 
     on("btn-upload", async () => {
       try {
