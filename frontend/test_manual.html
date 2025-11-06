@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manual Node Persistence Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        button { margin: 5px; padding: 10px 15px; cursor: pointer; }
+        #log { background: #f5f5f5; padding: 10px; min-height: 200px; font-family: monospace; white-space: pre-wrap; }
+        #canvas { border: 2px solid #333; width: 100%; height: 400px; position: relative; overflow: hidden; }
+        .node { position: absolute; background: white; border: 2px solid #333; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Node Persistence Manual Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Controls</h2>
+        <button onclick="addTestNode()">Add Node</button>
+        <button onclick="callRender()">Call render()</button>
+        <button onclick="checkNodeCount()">Count Nodes</button>
+        <button onclick="clearLog()">Clear Log</button>
+        <button onclick="checkModelState()">Check model.nodes</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Canvas</h2>
+        <div id="canvas">
+            <svg id="wires"></svg>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Log</h2>
+        <div id="log"></div>
+    </div>
+    
+    <script>
+        // Simplified version of app.js render logic
+        const canvas = document.getElementById('canvas');
+        let model = { nodes: [], edges: [] };
+        let nextId = 1;
+        
+        function log(msg) {
+            const logEl = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logEl.textContent += `[${timestamp}] ${msg}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('log').textContent = '';
+        }
+        
+        function addTestNode() {
+            const node = {
+                id: nextId++,
+                type: 'test',
+                name: `Node ${nextId - 1}`,
+                pos: { x: 20 + (nextId - 1) * 100, y: 20 },
+                params: {}
+            };
+            model.nodes.push(node);
+            log(`Added node ${node.id} to model. Total nodes in model: ${model.nodes.length}`);
+            render();
+        }
+        
+        function createNodeEl(n) {
+            const el = document.createElement("div");
+            el.className = "node";
+            el.style.left = (n.pos?.x ?? 20) + "px";
+            el.style.top = (n.pos?.y ?? 20) + "px";
+            el.dataset.nodeId = String(n.id);
+            el.innerHTML = `<strong>${n.name || n.type}</strong><br>ID: ${n.id}`;
+            return el;
+        }
+        
+        // ORIGINAL DESTRUCTIVE RENDER (like old app.js)
+        function render_old() {
+            log('[render_old] Starting DESTRUCTIVE render');
+            
+            // This is what the OLD code did - DESTROY EVERYTHING
+            let svg = canvas.querySelector("#wires");
+            if (!svg) {
+                canvas.innerHTML = '<svg id="wires"></svg>';
+                svg = canvas.querySelector("#wires");
+            }
+            
+            // Remove all non-SVG children
+            Array.from(canvas.children).forEach(child => {
+                if (child.tagName.toLowerCase() !== "svg") {
+                    child.remove();
+                }
+            });
+            
+            // Recreate all nodes
+            model.nodes.forEach(n => {
+                const el = createNodeEl(n);
+                canvas.appendChild(el);
+            });
+            
+            const domCount = canvas.querySelectorAll('.node').length;
+            log(`[render_old] Recreated ${domCount} nodes. model.nodes = ${model.nodes.length}`);
+        }
+        
+        // NEW NON-DESTRUCTIVE RENDER (like updated app.js)
+        function render() {
+            log('[render] Starting NON-DESTRUCTIVE render');
+            
+            // Ensure SVG exists
+            let svg = canvas.querySelector("#wires");
+            if (!svg) {
+                svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                svg.id = "wires";
+                canvas.appendChild(svg);
+            }
+            
+            // Get existing node elements
+            const existingNodes = new Map();
+            Array.from(canvas.children).forEach(child => {
+                if (child.tagName.toLowerCase() !== "svg" && child.dataset.nodeId) {
+                    existingNodes.set(parseInt(child.dataset.nodeId), child);
+                }
+            });
+            
+            log(`[render] Found ${existingNodes.size} existing DOM nodes`);
+            
+            // Track processed IDs
+            const processedIds = new Set();
+            
+            // Update or create nodes
+            model.nodes.forEach(n => {
+                processedIds.add(n.id);
+                const existing = existingNodes.get(n.id);
+                
+                if (existing) {
+                    log(`[render] Node ${n.id} exists, updating`);
+                } else {
+                    log(`[render] Node ${n.id} is new, creating`);
+                    const el = createNodeEl(n);
+                    canvas.appendChild(el);
+                }
+            });
+            
+            // Remove nodes that no longer exist
+            existingNodes.forEach((el, id) => {
+                if (!processedIds.has(id)) {
+                    log(`[render] Removing orphaned node ${id}`);
+                    el.remove();
+                }
+            });
+            
+            const domCount = canvas.querySelectorAll('.node').length;
+            log(`[render] Complete. DOM nodes: ${domCount}, model.nodes: ${model.nodes.length}`);
+        }
+        
+        function callRender() {
+            render();
+        }
+        
+        function checkNodeCount() {
+            const domCount = canvas.querySelectorAll('.node[data-node-id]').length;
+            const modelCount = model.nodes.length;
+            log(`Node count check: DOM=${domCount}, model.nodes=${modelCount}`);
+            
+            if (domCount !== modelCount) {
+                log(`⚠️ MISMATCH DETECTED! DOM and model out of sync!`);
+            } else {
+                log(`✓ DOM and model in sync`);
+            }
+        }
+        
+        function checkModelState() {
+            log(`model.nodes = ${JSON.stringify(model.nodes, null, 2)}`);
+        }
+        
+        // Initialize
+        log('Test page loaded. Click "Add Node" to start.');
+        log('Try adding nodes, then calling render() multiple times.');
+        log('Check if nodes persist or disappear.');
+    </script>
+</body>
+</html>

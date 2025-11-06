@@ -7,6 +7,7 @@
 
   <!-- Your stylesheet is still loaded; we also add a few inline rules below -->
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="sysml-styles.css" />
 
   <style>
     :root { --ink:#111; --card:#fff; --line:#e5e7eb; }
@@ -99,9 +100,79 @@
         <button type="button" class="btn" id="btn-export-model">Export Model JSON</button>
         <button type="button" class="btn" id="btn-load-model">Load Model JSON</button>
         <button type="button" class="btn" id="btn-generate-from-model">Generate From Model</button>
+        <button type="button" class="btn" id="btn-toggle-sysml">SysML Block View</button>
       </div>
 
       <div class="studio">
+        <!-- SysML Block Diagram View -->
+        <div id="sysml-view" class="sysml-diagram" style="display: none;">
+          <div class="sysml-title">QML Pipeline - SysML Block Diagram</div>
+          <div class="sysml-layout sysml-layout-horizontal">
+            <div class="sysml-block" data-type="datablock" id="sysml-datablock">
+              <div class="sysml-stereotype">«block»</div>
+              <div class="sysml-block-header">DataBlock</div>
+              <div class="sysml-properties">
+                <div class="sysml-property">dataset_type: iris</div>
+                <div class="sysml-property">test_size: 0.2</div>
+                <div class="sysml-property">seed: 42</div>
+              </div>
+              <div class="sysml-flow sysml-flow-horizontal">
+                <div class="sysml-flow-arrow"></div>
+                <div class="sysml-flow-label">ProcessedData</div>
+              </div>
+            </div>
+
+            <div class="sysml-block" data-type="encoderblock" id="sysml-encoderblock">
+              <div class="sysml-stereotype">«block»</div>
+              <div class="sysml-block-header">EncoderBlock</div>
+              <div class="sysml-properties">
+                <div class="sysml-property">encoding_type: angle</div>
+                <div class="sysml-property">n_qubits: 4</div>
+              </div>
+              <div class="sysml-flow sysml-flow-horizontal">
+                <div class="sysml-flow-arrow"></div>
+                <div class="sysml-flow-label">EncodedData</div>
+              </div>
+            </div>
+
+            <div class="sysml-block" data-type="circuitblock" id="sysml-circuitblock">
+              <div class="sysml-stereotype">«block»</div>
+              <div class="sysml-block-header">CircuitBlock</div>
+              <div class="sysml-properties">
+                <div class="sysml-property">ansatz_type: ry</div>
+                <div class="sysml-property">num_layers: 2</div>
+              </div>
+              <div class="sysml-flow sysml-flow-horizontal">
+                <div class="sysml-flow-arrow"></div>
+                <div class="sysml-flow-label">QuantumFeatures</div>
+              </div>
+            </div>
+
+            <div class="sysml-block" data-type="optimizerblock" id="sysml-optimizerblock">
+              <div class="sysml-stereotype">«block»</div>
+              <div class="sysml-block-header">OptimizerBlock</div>
+              <div class="sysml-properties">
+                <div class="sysml-property">optimizer_type: cobyla</div>
+                <div class="sysml-property">max_iterations: 100</div>
+              </div>
+              <div class="sysml-flow sysml-flow-horizontal">
+                <div class="sysml-flow-arrow"></div>
+                <div class="sysml-flow-label">TrainedModel</div>
+              </div>
+            </div>
+
+            <div class="sysml-block" data-type="outputblock" id="sysml-outputblock">
+              <div class="sysml-stereotype">«block»</div>
+              <div class="sysml-block-header">OutputBlock</div>
+              <div class="sysml-properties">
+                <div class="sysml-property">return_predictions: true</div>
+                <div class="sysml-property">metrics: accuracy</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas View -->
         <div id="canvas" aria-label="Model canvas">
           <svg id="wires"></svg>
         </div>
@@ -135,11 +206,12 @@
       </div>
 
       <div class="panel" style="margin-top:12px">
-        <h3>Dataset Selection</h3>
+        <h3>Dataset Selection (SysML Blocks)</h3>
         <div style="margin-bottom: 10px;">
           <button type="button" class="btn" id="btn-diabetes">Use Diabetes Dataset</button>
-          <button type="button" class="btn" id="btn-iris">Use Iris Dataset</button>
+          <button type="button" class="btn" id="btn-iris">Use Iris Dataset (Binary)</button>
           <button type="button" class="btn" id="btn-realestate">Use Real Estate Dataset</button>
+          <button type="button" class="btn" id="btn-mnist">Use MNIST Subset (0 vs 1)</button>
         </div>
         
         <h3>Actions</h3>

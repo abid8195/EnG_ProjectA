@@ -8,6 +8,16 @@
 (function(){
   // ---------- helpers ----------
   const $ = (id) => document.getElementById(id);
+  
+  // Dynamic API base URL - works for both local development and Azure deployment
+  const getApiBaseUrl = () => {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:5000';
+    }
+    // For Azure deployment, use the same host but different port/path
+    return `${window.location.protocol}//${window.location.host}`;
+  };
+  
   const setMsg = (t, kind="info") => {
     const m = $("msg"); if (!m) return;
     m.textContent = t || "";
@@ -375,7 +385,7 @@ qnn = EstimatorQNN(qc)
     async function loadDataset(datasetName) {
       try {
         setMsg(`Loading ${datasetName} dataset...`);
-        const resp = await fetch(`http://localhost:5000/dataset/${datasetName}`);
+        const resp = await fetch(`${getApiBaseUrl()}/dataset/${datasetName}`);
         const data = await resp.json();
         if (!resp.ok) throw new Error(data?.error || resp.statusText);
 
@@ -416,6 +426,7 @@ qnn = EstimatorQNN(qc)
     on("btn-diabetes", () => loadDataset("diabetes"));
     on("btn-iris", () => loadDataset("iris"));
     on("btn-realestate", () => loadDataset("realestate"));
+    on("btn-mnist", () => loadDataset("mnist_subset"));
 
     on("btn-upload", async () => {
       try {
@@ -424,7 +435,7 @@ qnn = EstimatorQNN(qc)
         if (!f.name.toLowerCase().endsWith(".csv")) return setMsg("Only .csv files allowed.","err");
         setMsg("Uploading CSV…");
         const form = new FormData(); form.append("file", f);
-        const resp = await fetch("http://localhost:5000/upload", { method:"POST", body: form });
+        const resp = await fetch(`${getApiBaseUrl()}/upload`, { method:"POST", body: form });
         const j = await resp.json(); if (!resp.ok) throw new Error(j?.error || resp.statusText);
 
         const { label, features } = inferLabelAndFeatures(j.columns || []);
@@ -516,7 +527,7 @@ qnn = EstimatorQNN(qc)
         setMsg(""); $("result").textContent = "Running…";
         spec.circuit.num_qubits = Math.max(1, Math.min(Number(spec.circuit.num_qubits||4), 4));
         spec.optimizer.maxiter  = Math.max(1, Math.min(Number(spec.optimizer.maxiter||15), 20));
-        const resp = await fetch("http://localhost:5000/run", {
+        const resp = await fetch(`${getApiBaseUrl()}/run`, {
           method:"POST", headers:{ "Content-Type":"application/json" },
           body: JSON.stringify(spec)
         });
@@ -525,5 +536,85 @@ qnn = EstimatorQNN(qc)
         setMsg("Pipeline finished.","ok");
       } catch (e) { setMsg(e.message || String(e), "err"); $("result").textContent = ""; }
     });
+
+    // SysML Block Diagram Toggle
+    on("btn-toggle-sysml", () => {
+      const sysmlView = $("sysml-view");
+      const canvasView = $("canvas");
+      const toggleBtn = $("btn-toggle-sysml");
+      
+      if (sysmlView.style.display === "none") {
+        sysmlView.style.display = "block";
+        canvasView.style.display = "none";
+        toggleBtn.textContent = "Canvas View";
+        updateSysMLBlocks();
+        setMsg("Switched to SysML Block Diagram view", "ok");
+      } else {
+        sysmlView.style.display = "none";
+        canvasView.style.display = "block";
+        toggleBtn.textContent = "SysML Block View";
+        setMsg("Switched to Canvas view", "ok");
+      }
+    });
+
+    // Update SysML blocks based on current model
+    function updateSysMLBlocks() {
+      const dataBlock = $("sysml-datablock");
+      const encoderBlock = $("sysml-encoderblock");
+      const circuitBlock = $("sysml-circuitblock");
+      const optimizerBlock = $("sysml-optimizerblock");
+      const outputBlock = $("sysml-outputblock");
+
+      // Find relevant nodes in current model
+      const nodes = model.nodes || [];
+      
+      nodes.forEach(node => {
+        if (node.type === "dataset" && dataBlock) {
+          const props = dataBlock.querySelector(".sysml-properties");
+          props.innerHTML = `
+            <div class="sysml-property">dataset_type: ${node.params?.type || "iris"}</div>
+            <div class="sysml-property">test_size: ${node.params?.test_size || "0.2"}</div>
+            <div class="sysml-property">seed: ${node.params?.seed || "42"}</div>
+          `;
+          dataBlock.classList.add("active");
+        }
+        
+        if (node.type === "encoder" && encoderBlock) {
+          const props = encoderBlock.querySelector(".sysml-properties");
+          props.innerHTML = `
+            <div class="sysml-property">encoding_type: ${node.params?.type || "angle"}</div>
+            <div class="sysml-property">n_qubits: ${node.params?.n_qubits || "4"}</div>
+          `;
+          encoderBlock.classList.add("active");
+        }
+        
+        if (node.type === "circuit" && circuitBlock) {
+          const props = circuitBlock.querySelector(".sysml-properties");
+          props.innerHTML = `
+            <div class="sysml-property">ansatz_type: ${node.params?.ansatz || "ry"}</div>
+            <div class="sysml-property">num_layers: ${node.params?.layers || "2"}</div>
+          `;
+          circuitBlock.classList.add("active");
+        }
+        
+        if (node.type === "optimizer" && optimizerBlock) {
+          const props = optimizerBlock.querySelector(".sysml-properties");
+          props.innerHTML = `
+            <div class="sysml-property">optimizer_type: ${node.params?.type || "cobyla"}</div>
+            <div class="sysml-property">max_iterations: ${node.params?.maxiter || "100"}</div>
+          `;
+          optimizerBlock.classList.add("active");
+        }
+        
+        if (node.type === "output" && outputBlock) {
+          const props = outputBlock.querySelector(".sysml-properties");
+          props.innerHTML = `
+            <div class="sysml-property">return_predictions: ${node.params?.return_predictions !== false}</div>
+            <div class="sysml-property">metrics: ${node.params?.metrics || "accuracy"}</div>
+          `;
+          outputBlock.classList.add("active");
+        }
+      });
+    }
   });
 })();
