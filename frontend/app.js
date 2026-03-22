@@ -416,6 +416,7 @@ qnn = EstimatorQNN(qc)
     on("btn-diabetes", () => loadDataset("diabetes"));
     on("btn-iris", () => loadDataset("iris"));
     on("btn-realestate", () => loadDataset("realestate"));
+    on("btn-heart-disease", () => loadDataset("heart_disease"));
 
     on("btn-upload", async () => {
       try {
@@ -525,5 +526,123 @@ qnn = EstimatorQNN(qc)
         setMsg("Pipeline finished.","ok");
       } catch (e) { setMsg(e.message || String(e), "err"); $("result").textContent = ""; }
     });
+
+    // ---------------------------------------------------------------
+    // Kipu Quantum integration
+    // ---------------------------------------------------------------
+
+    /** Set the status label inside the Kipu panel */
+    const kipuStatus = (msg, kind = "info") => {
+      const el = $("kipu-status");
+      if (!el) return;
+      el.textContent = msg;
+      el.style.color = kind === "err"  ? "#ef4444"
+                     : kind === "ok"   ? "#22c55e"
+                     : kind === "warn" ? "#f59e0b"
+                     :                   "#6d28d9";
+    };
+
+    /** Populate the backend <select> from /kipu/backends */
+    async function loadKipuBackends() {
+      const token = ($("kipu-token") || {}).value || "";
+      if (!token.trim()) {
+        kipuStatus("Please enter your access token first.", "warn");
+        return;
+      }
+      kipuStatus("Loading backends…");
+      try {
+        const resp = await fetch(
+          `http://localhost:5000/kipu/backends?token=${encodeURIComponent(token)}`
+        );
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data?.error || resp.statusText);
+
+        const sel = $("kipu-backend");
+        sel.innerHTML = "";
+        (data.backends || []).forEach(b => {
+          const opt = document.createElement("option");
+          opt.value = b.name;
+          const tag = b.type === "simulator" ? "🖥 sim" : "⚛ hw";
+          const qb  = b.num_qubits ? ` · ${b.num_qubits}q` : "";
+          const op  = b.operational ? "" : " [offline]";
+          opt.textContent = `${b.name}  (${tag}${qb}${op})`;
+          if (!b.operational) opt.style.color = "#94a3b8";
+          sel.appendChild(opt);
+        });
+
+        if (!data.backends || data.backends.length === 0) {
+          sel.innerHTML = "<option value=''>No backends found</option>";
+          kipuStatus("No backends returned by Kipu Hub.", "warn");
+        } else {
+          kipuStatus(`${data.backends.length} backend(s) loaded.`, "ok");
+        }
+      } catch (e) {
+        kipuStatus(e.message || String(e), "err");
+      }
+    }
+
+    /** Submit a quantum circuit job to Kipu and display results */
+    async function runOnKipu() {
+      const token       = ($("kipu-token")   || {}).value || "";
+      const backendName = ($("kipu-backend")  || {}).value || "";
+      const shots       = parseInt(($("kipu-shots") || {}).value || "1024", 10);
+      const numQubits   = parseInt(($("kipu-qubits") || {}).value || "2", 10);
+      const gatesRaw    = ($("kipu-gates") || {}).value || "";
+      const resultEl    = $("kipu-result");
+
+      if (!token.trim())       { kipuStatus("Access token is required.", "warn"); return; }
+      if (!backendName)        { kipuStatus("Select a backend first.", "warn"); return; }
+
+      // Parse optional gates JSON
+      let gates = [];
+      if (gatesRaw.trim()) {
+        try {
+          gates = JSON.parse(gatesRaw.trim());
+        } catch {
+          kipuStatus('Gates must be valid JSON, e.g. [{"gate":"h","qubits":[0]}]', "err");
+          return;
+        }
+      }
+
+      const circuitSpec = { num_qubits: numQubits, gates, measure_all: true };
+
+      kipuStatus("Submitting job…  ⏳");
+      resultEl.style.display = "none";
+      resultEl.textContent   = "";
+
+      try {
+        const resp = await fetch("http://localhost:5000/kipu/run", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            token,
+            backend_name: backendName,
+            circuit_spec: circuitSpec,
+            shots
+          })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data?.error || resp.statusText);
+
+        resultEl.textContent   = JSON.stringify(data, null, 2);
+        resultEl.style.display = "block";
+        kipuStatus(
+          `✓ Job ${data.job_id || ""} done in ${data.time_taken ?? "?"}s`, "ok"
+        );
+      } catch (e) {
+        kipuStatus(e.message || String(e), "err");
+        resultEl.textContent   = e.message || String(e);
+        resultEl.style.display = "block";
+        resultEl.style.color   = "#ef4444";
+      }
+    }
+
+    // Bind Kipu buttons
+    const kipuLoadBtn = $("btn-kipu-load-backends");
+    if (kipuLoadBtn) kipuLoadBtn.addEventListener("click", loadKipuBackends);
+
+    const kipuRunBtn = $("btn-kipu-run");
+    if (kipuRunBtn) kipuRunBtn.addEventListener("click", runOnKipu);
+
   });
 })();
