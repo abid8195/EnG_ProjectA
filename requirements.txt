@@ -4,8 +4,11 @@
 flask>=2.0.0
 flask-cors>=3.0.0
 
-# Qiskit stack
-qiskit>=0.45.0
+# Kipu Quantum Hub SDK  (quantum execution engine)
+qhub-quantum>=0.1.0
+
+# Qiskit stack (used by kipu_executor circuit builder + optional local QML)
+qiskit>=1.0.0
 qiskit-algorithms>=0.2.0
 qiskit-machine-learning>=0.7.0
 qiskit-aer>=0.13.0
