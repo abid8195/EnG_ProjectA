@@ -1,0 +1,70 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "dataset",
+      "name": "Dataset",
+      "pos": {
+        "x": 20,
+        "y": 20
+      },
+      "params": {
+        "path": "",
+        "label": "",
+        "features": ""
+      }
+    },
+    {
+      "id": 2,
+      "type": "encoder",
+      "name": "Encoder",
+      "pos": {
+        "x": 321,
+        "y": 67
+      },
+      "params": {
+        "type": "angle"
+      }
+    },
+    {
+      "id": 3,
+      "type": "circuit",
+      "name": "Circuit",
+      "pos": {
+        "x": 41,
+        "y": 269
+      },
+      "params": {
+        "type": "ry",
+        "num_qubits": "2",
+        "reps": "1"
+      }
+    },
+    {
+      "id": 4,
+      "type": "optimizer",
+      "name": "Optimizer",
+      "pos": {
+        "x": 367,
+        "y": 241
+      },
+      "params": {
+        "type": "cobyla",
+        "maxiter": "15"
+      }
+    },
+    {
+      "id": 5,
+      "type": "output",
+      "name": "Output",
+      "pos": {
+        "x": 386,
+        "y": 478
+      },
+      "params": {
+        "predictions": "true"
+      }
+    }
+  ],
+  "edges": []
+}

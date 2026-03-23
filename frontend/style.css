@@ -1,0 +1,137 @@
+/* ===== Dark Teal theme ===== */
+:root{
+  --bg:#57564F;           
+  --card:#7A7A73;         
+  --ink:#DDDAD0;          
+  --muted:#FDEB9E;        
+  --line:#57564F;         
+  --accent:#14b8a6;       
+  --accent-ink:#062a28;   
+  --ok:#22c55e; --err:#ef4444; --info:#60a5fa;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: system-ui, -apple-system, sans-serif;
+  color:var(--ink); background:var(--bg); line-height:1.45;
+}
+
+/* ===== Layout ===== */
+.container{max-width:1200px; margin:0 auto; padding:0 16px}
+.header{display:flex; align-items:flex-end; gap:12px; margin-bottom:20px}
+.h1{font-size:28px; font-weight:800; margin:0; text-align: center; width: 100%}
+.sub{color:var(--muted); font-size:14px}
+
+.grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:16px}
+@media (max-width: 900px){ .grid{grid-template-columns: 1fr} }
+
+/* ===== Cards ===== */
+.card{
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.card h2{margin:0 0 8px 0; font-size:18px}
+.diagram{width:100%; height:auto; border-radius:10px; border:1px solid var(--line)}
+
+/* ===== Buttons & badges ===== */
+.btn{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 14px; border-radius:6px;
+  background: #f7fafc; color:#0b1220; cursor:pointer; font-weight:700;
+  border: 1px solid rgba(11,18,32,0.08);
+  box-shadow: 0 1px 0 rgba(11,18,32,0.04);
+}
+.btn:hover{background:#eef2f7}
+.btn.primary{background: var(--accent); color: var(--accent-ink); border-color: rgba(0,0,0,0.08)}
+.btn.primary:hover{filter:brightness(0.98)}
+.toolbar{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px}
+
+/* Visual Modeler styling */
+.editor-toolbar { 
+  position: relative; 
+  z-index: 20;
+  margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#drawflow {
+  position: relative;
+  z-index: 5;
+  background: #fafafa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+#sidepanel {
+  position: relative;
+  z-index: 15;
+  background: #fff;
+  padding: 16px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+/* Drawflow node styling */
+.drawflow .drawflow-node {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.drawflow .drawflow-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.drawflow .drawflow-node .box {
+  padding: 10px;
+}
+
+.drawflow .drawflow-node .node-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.drawflow .drawflow-node .node-param {
+  display: block;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.drawflow .drawflow-node input {
+  width: 140px;
+  padding: 4px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+}
+
+/* Ensure buttons are always clickable */
+.btn { 
+  position: relative;
+  z-index: 25;
+}
+
+.badge{
+  display:inline-block; padding:2px 6px; border-radius:4px; font-size:12px;
+  border:1px solid var(--line); background:#0f172a; color:var(--muted)
+}
+.badge.info{background:#e3f2fd; color:#0066cc}
+.badge.ok{color:var(--ok); border-color:#166534}
+.badge.err{color:var(--err); border-color:#7f1d1d}
+
+/* ===== Code block ===== */
+pre{
+  background:#0a0f1a; color:#cbd5e1; padding:12px; border-radius:10px;
+  border:1px solid #0b1220; overflow:auto; margin-top:8px;
+}
+
+/* ===== Helpers ===== */
+.note{color:var(--muted); font-size:14px}

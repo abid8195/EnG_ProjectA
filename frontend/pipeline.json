@@ -1,0 +1,25 @@
+{
+  "name": "qml-pipeline-prototype",
+  "dataset": {
+    "columns": [],
+    "n_samples": 0
+  },
+  "encoder": {
+    "type": "angle",
+    "params": {
+      "features": 4
+    }
+  },
+  "circuit": {
+    "ansatz": "ry",
+    "layers": 2
+  },
+  "optimizer": {
+    "name": "SPSA",
+    "maxiter": 100
+  },
+  "output": {
+    "model": "qnn",
+    "framework": "qiskit"
+  }
+}
