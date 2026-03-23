@@ -9,7 +9,10 @@ qiskit>=0.45.0
 qiskit-algorithms>=0.2.0
 qiskit-machine-learning>=0.7.0
 qiskit-aer>=0.13.0
+<<<<<<< HEAD
 qhub-quantum>=1.0.7
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
 
 # Data science
 scikit-learn>=1.0.0

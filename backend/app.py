@@ -56,12 +56,18 @@ def run():
     try:
         spec = request.get_json(force=True)
         out = run_pipeline(spec)
+<<<<<<< HEAD
         # Only set status if the runner didn't already provide one.
         if isinstance(out, dict) and "status" not in out:
             out["status"] = "ok"
         return jsonify(out)
     except ValueError as e:
         return jsonify({"status": "error", "error": str(e)}), 400
+=======
+        # Make it explicit that this is the quantum path (no 'note' key anymore)
+        out["status"] = "ok"
+        return jsonify(out)
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     except ImportError as e:
         # Surface exactly which modules are missing
         return jsonify({

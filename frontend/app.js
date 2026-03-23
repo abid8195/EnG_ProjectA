@@ -4,7 +4,10 @@
    - Robust CSV upload updates Dataset block + spec
    - Iris sample visibly configures Dataset block
    - Null-safe model export/import, codegen, run
+<<<<<<< HEAD
    - Training accuracy + loss charts integrated into dashboard
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
 */
 (function(){
   // ---------- helpers ----------
@@ -23,6 +26,7 @@
   };
   const download = (name, text, mime="application/json") => {
     const url = URL.createObjectURL(new Blob([text], { type:mime }));
+<<<<<<< HEAD
     const a=document.createElement("a");
     a.href=url;
     a.download=name;
@@ -30,6 +34,9 @@
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+=======
+    const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
   };
 
   // ---------- state ----------
@@ -39,15 +46,21 @@
   let nextX=20, nextY=20, nextId=1;
   let pendingSource = null; // for click–click wiring
 
+<<<<<<< HEAD
   let accuracyChart = null;
   let lossChart = null;
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
   // SPEC used by backend / codegen
   const spec = {
     version: "0.1",
     pipeline: "qml-classifier",
     qnn: { type: "estimator" },
+<<<<<<< HEAD
     execution_mode: "classical",
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     dataset: { type: "synthetic-line", num_samples: 24, num_features: 2, test_size: 0.2, seed: 42 },
     encoder: { type: "angle" },
     circuit: { type: "ry", num_qubits: 2, reps: 2 },
@@ -55,6 +68,7 @@
     outputs: { return_predictions: true }
   };
 
+<<<<<<< HEAD
   // ---------- charts ----------
   function clearCharts() {
     if (accuracyChart) {
@@ -160,6 +174,8 @@
     }
   }
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
   // ---------- wiring ----------
   function addEdge(sourceId, targetId) {
     if (!model.edges.find(e => e.source === sourceId && e.target === targetId)) {
@@ -168,20 +184,30 @@
     renderWires();
     setMsg(`Connected ${sourceId} → ${targetId}`, "ok");
   }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
   function removeEdgesForNode(nodeId) {
     model.edges = model.edges.filter(e => e.source !== nodeId && e.target !== nodeId);
     renderWires();
   }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
   function renderWires() {
     const svg = document.getElementById("wires");
     if (!svg) return;
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
+<<<<<<< HEAD
     const canvasEl = document.getElementById("canvas");
     if (!canvasEl) return;
     const canvasRect = canvasEl.getBoundingClientRect();
+=======
+    const canvasRect = document.getElementById("canvas").getBoundingClientRect();
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
 
     model.edges.forEach(e => {
       const srcEl = document.querySelector(`.node[data-id="${e.source}"] .port.out`);
@@ -191,20 +217,31 @@
       const s = srcEl.getBoundingClientRect();
       const t = tgtEl.getBoundingClientRect();
 
+<<<<<<< HEAD
       const x1 = s.left + s.width/2  - canvasRect.left + canvasEl.scrollLeft;
       const y1 = s.top  + s.height/2 - canvasRect.top  + canvasEl.scrollTop;
       const x2 = t.left + t.width/2  - canvasRect.left + canvasEl.scrollLeft;
       const y2 = t.top  + t.height/2 - canvasRect.top  + canvasEl.scrollTop;
+=======
+      const x1 = s.left + s.width/2  - canvasRect.left + document.getElementById("canvas").scrollLeft;
+      const y1 = s.top  + s.height/2 - canvasRect.top  + document.getElementById("canvas").scrollTop;
+      const x2 = t.left + t.width/2  - canvasRect.left + document.getElementById("canvas").scrollLeft;
+      const y2 = t.top  + t.height/2 - canvasRect.top  + document.getElementById("canvas").scrollTop;
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
 
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       const dx = Math.max(40, Math.abs(x2 - x1) / 2);
       const d = `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`;
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
       path.setAttribute("d", d);
       path.setAttribute("fill", "none");
       path.setAttribute("stroke", "#2563eb");
       path.setAttribute("stroke-width", "3");
       path.setAttribute("stroke-linecap", "round");
+<<<<<<< HEAD
       path.style.filter = "drop-shadow(0 1px 2px rgba(0,0,0,0.1))";
       path.style.strokeDasharray = "10,5";
       path.style.strokeDashoffset = "15";
@@ -212,6 +249,19 @@
 
       svg.appendChild(path);
 
+=======
+      path.setAttribute("stroke-dasharray", "none");
+      path.style.filter = "drop-shadow(0 1px 2px rgba(0,0,0,0.1))";
+      
+      // Add a subtle animation on creation
+      path.style.strokeDasharray = "10,5";
+      path.style.strokeDashoffset = "15";
+      path.style.animation = "dash 0.5s linear forwards";
+      
+      svg.appendChild(path);
+      
+      // Remove animation after it completes
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
       setTimeout(() => {
         path.style.strokeDasharray = "none";
         path.style.animation = "none";
@@ -222,6 +272,7 @@
   // ---------- node rendering ----------
   function nodeHtml(title, fields=[]){
     let body = `<div class="node-title">${title}</div>`;
+<<<<<<< HEAD
     body += `<div class="ports"></div>`;
     fields.forEach(f => {
       body += `<label class="node-param">${f.label}: <input data-param="${f.name}" value="${f.value ?? ""}" /></label>`;
@@ -229,6 +280,13 @@
     return body;
   }
 
+=======
+    // inline ports row appended by createNodeEl
+    body += `<div class="ports"></div>`;
+    fields.forEach(f => body += `<label class="node-param">${f.label}: <input data-param="${f.name}" value="${f.value ?? ""}" /></label>`);
+    return body;
+  }
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
   function createNodeEl(n){
     const el = document.createElement("div");
     el.className = "node";
@@ -239,21 +297,34 @@
     const fields = Object.entries(n.params||{}).map(([k,v]) => ({name:k,label:k,value:v}));
     el.innerHTML = nodeHtml(n.name || n.type || "Node", fields);
 
+<<<<<<< HEAD
+=======
+    // insert ports and header text
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     const title = el.querySelector(".node-title");
     if (title) {
       title.textContent = n.name || n.type || "Node";
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     const portsWrap = el.querySelector(".ports");
     if (portsWrap) {
       const inPort  = document.createElement("span");
       const outPort = document.createElement("span");
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
       inPort.className = "port in";
       outPort.className = "port out";
       inPort.title = "Connect input";
       outPort.title = "Connect output";
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
       portsWrap.appendChild(inPort);
       portsWrap.appendChild(outPort);
 
@@ -262,7 +333,10 @@
         pendingSource = n.id;
         setMsg(`Selected output of ${n.id}. Now click a target input.`, "info");
       });
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
       inPort.addEventListener("click", (e) => {
         e.stopPropagation();
         if (pendingSource && pendingSource !== n.id) addEdge(pendingSource, n.id);
@@ -270,6 +344,7 @@
       });
     }
 
+<<<<<<< HEAD
     el.addEventListener("click", (e) => {
       e.stopPropagation();
       selectNode(n.id);
@@ -322,16 +397,54 @@
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
 
+=======
+    el.addEventListener("click", (e) => { e.stopPropagation(); selectNode(n.id); });
+    enableDrag(el, n.id);
+    return el;
+  }
+  function enableDrag(el, id){
+    let startX=0, startY=0, origX=0, origY=0, dragging=false;
+    const down = (e) => {
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      dragging = true; el.style.cursor="grabbing";
+      startX = e.clientX; startY = e.clientY;
+      const r = el.getBoundingClientRect();
+      const c = document.getElementById("canvas");
+      const cr = c.getBoundingClientRect();
+      origX = r.left + c.scrollLeft - cr.left;
+      origY = r.top  + c.scrollTop  - cr.top;
+      document.addEventListener("mousemove", move);
+      document.addEventListener("mouseup", up);
+    };
+    const move = (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX, dy = e.clientY - startY;
+      const nx = Math.max(0, origX + dx), ny = Math.max(0, origY + dy);
+      el.style.left = nx + "px"; el.style.top = ny + "px";
+      renderWires(); // live-update wires
+    };
+    const up = () => {
+      if (!dragging) return;
+      dragging=false; el.style.cursor="grab";
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
       const n = model.nodes.find(x => x.id === id);
       if (n){
         n.pos = { x: parseInt(el.style.left)||0, y: parseInt(el.style.top)||0 };
       }
       renderWires();
     };
+<<<<<<< HEAD
 
     el.addEventListener("mousedown", down);
   }
 
+=======
+    el.addEventListener("mousedown", down);
+  }
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
   function render(){
     canvas.innerHTML = '<svg id="wires"></svg>';
     model.nodes.forEach(n => {
@@ -345,6 +458,7 @@
   // ---------- selection + side panel ----------
   function selectNode(id){
     selectedId = id;
+<<<<<<< HEAD
     render();
 
     const info = $("selected-info");
@@ -357,6 +471,12 @@
       return;
     }
 
+=======
+    render(); // updates selection outline
+    const info = $("selected-info"), panel = $("node-params");
+    const n = model.nodes.find(x => x.id === id);
+    if (!n){ info.textContent = "Node not found."; panel.innerHTML=""; return; }
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     info.textContent = `${n.name || n.type} (id ${n.id})`;
 
     const fields = Object.entries(n.params||{}).map(([k,v]) => ({name:k,label:k,value:v}));
@@ -374,6 +494,7 @@
       pos: { x: nextX, y: nextY },
       params: Object.fromEntries(defaults.map(d => [d.name, d.value ?? ""]))
     };
+<<<<<<< HEAD
 
     nextX += 170;
     if (nextX > 900){
@@ -384,14 +505,24 @@
     model.nodes.push(n);
     render();
     selectNode(n.id);
+=======
+    nextX += 170; if (nextX > 900){ nextX = 20; nextY += 170; }
+    model.nodes.push(n);
+    render(); selectNode(n.id);
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     setMsg(`${title} node added.`, "ok");
   }
 
   // ---------- export/import ----------
   function exportModel(){
+<<<<<<< HEAD
     return JSON.parse(JSON.stringify(model));
   }
 
+=======
+    return JSON.parse(JSON.stringify(model)); // includes nodes + edges
+  }
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
   function importModel(j){
     if (j && Array.isArray(j.nodes)){
       model = { nodes: [], edges: Array.isArray(j.edges) ? j.edges : [] };
@@ -405,6 +536,7 @@
         };
         model.nodes.push(n);
       });
+<<<<<<< HEAD
 
       nextId = model.nodes.reduce((m, n) => Math.max(m, n.id), 0) + 1;
       nextX = 20;
@@ -412,6 +544,11 @@
       render();
       selectedId = null;
       $("selected-info").textContent = "Model loaded.";
+=======
+      nextId = model.nodes.reduce((m, n) => Math.max(m, n.id), 0) + 1;
+      nextX = 20; nextY = 20;
+      render(); selectedId = null; $("selected-info").textContent = "Model loaded.";
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     } else {
       throw new Error("Invalid model JSON");
     }
@@ -420,6 +557,7 @@
   // ---------- code template ----------
   function codeTemplate(s){
     const enc = s.encoder.type === "basis" ? "PauliFeatureMap" : "ZZFeatureMap";
+<<<<<<< HEAD
     const q   = Math.max(1, Math.min(Number(s.circuit.num_qubits||2), 4));
     const rep = Math.max(1, Number(s.circuit.reps||1));
 
@@ -442,6 +580,18 @@ from qiskit.circuit.library import ${enc}, ${ansLib}
 
 enc = ${enc}(feature_dimension=${q})
 var = ${ansInit}
+=======
+    const ans = s.circuit.type === "realamplitudes" ? "RealAmplitudes" : "RY";
+    const q   = Math.max(1, Math.min(Number(s.circuit.num_qubits||2), 4));
+    const rep = Math.max(1, Number(s.circuit.reps||1));
+    return `# Auto-generated Qiskit template
+from qiskit import QuantumCircuit
+from qiskit_machine_learning.neural_networks import EstimatorQNN
+from qiskit.circuit.library import ${enc}, ${ans}
+
+enc = ${enc}(feature_dimension=${q})
+var = ${ans}(num_qubits=${q}, reps=${rep})
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
 qc = QuantumCircuit(${q}); qc.compose(enc, inplace=True); qc.compose(var, inplace=True)
 qnn = EstimatorQNN(qc)
 # Fit on your data (X,y) and report accuracy...
@@ -452,11 +602,16 @@ qnn = EstimatorQNN(qc)
   document.addEventListener("DOMContentLoaded", () => {
     setMsg("Canvas ready. Add nodes from the toolbar.", "ok");
 
+<<<<<<< HEAD
+=======
+    // add buttons
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     on("add-dataset", () => addNode("dataset","Dataset",[
       {name:"path",label:"CSV path",value:""},
       {name:"label",label:"Label",value:""},
       {name:"features",label:"Features (comma)",value:""}
     ]));
+<<<<<<< HEAD
 
     on("add-encoder", () => addNode("encoder","Encoder",[
       {name:"type",label:"Type (angle/basis)",value:"angle"}
@@ -468,19 +623,35 @@ qnn = EstimatorQNN(qc)
       {name:"reps",label:"layers",value:"1"}
     ]));
 
+=======
+    on("add-encoder", () => addNode("encoder","Encoder",[ {name:"type",label:"Type (angle/basis)",value:"angle"} ]));
+    on("add-circuit", () => addNode("circuit","Circuit",[
+      {name:"type",label:"Type (ry/realamplitudes)",value:"ry"},
+      {name:"num_qubits",label:"#qubits",value:"2"},
+      {name:"reps",label:"layers",value:"1"}
+    ]));
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     on("add-optimizer", () => addNode("optimizer","Optimizer",[
       {name:"type",label:"Type",value:"cobyla"},
       {name:"maxiter",label:"Max iter",value:"15"}
     ]));
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     on("add-output", () => addNode("output","Output",[
       {name:"predictions",label:"Return predictions (true/false)",value:"true"}
     ]));
 
+<<<<<<< HEAD
+=======
+    // save / delete
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     on("btn-save-node", () => {
       if (!selectedId) return setMsg("Select a node first.","err");
       const n = model.nodes.find(x => x.id === selectedId);
       if (!n) return setMsg("Node not found.","err");
+<<<<<<< HEAD
 
       const inputs = document.querySelectorAll("#node-params [data-param]");
       inputs.forEach(inp => {
@@ -489,6 +660,12 @@ qnn = EstimatorQNN(qc)
 
       render();
       selectNode(n.id);
+=======
+      const inputs = document.querySelectorAll("#node-params [data-param]");
+      inputs.forEach(inp => { n.params[inp.getAttribute("data-param")] = inp.value; });
+      // re-render updated params on the node element
+      render(); selectNode(n.id);
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
       setMsg("Node saved.","ok");
     });
 
@@ -497,16 +674,25 @@ qnn = EstimatorQNN(qc)
       removeEdgesForNode(selectedId);
       model.nodes = model.nodes.filter(x => x.id !== selectedId);
       selectedId = null;
+<<<<<<< HEAD
       render();
       $("node-params").innerHTML = "";
       $("selected-info").textContent = "No node selected.";
       setMsg("Node deleted.","ok");
     });
 
+=======
+      render(); $("node-params").innerHTML = ""; $("selected-info").textContent = "No node selected.";
+      setMsg("Node deleted.","ok");
+    });
+
+    // export / import
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     on("btn-export-model", () => download("pipeline_model.json", JSON.stringify(exportModel(),null,2)));
     on("btn-save-model",   () => download("node_canvas.json", JSON.stringify(exportModel(),null,2)));
     on("btn-load-model",   () => $("file-load-model").click());
     on("btn-load-model-ui",() => $("file-load-model").click());
+<<<<<<< HEAD
 
     $("file-load-model").addEventListener("change", (ev) => {
       const f = ev.target.files && ev.target.files[0];
@@ -523,11 +709,22 @@ qnn = EstimatorQNN(qc)
       r.readAsText(f);
     });
 
+=======
+    $("file-load-model").addEventListener("change", (ev) => {
+      const f = ev.target.files && ev.target.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = () => { try { importModel(JSON.parse(r.result)); } catch(e){ setMsg("Failed to load model: "+e.message,"err"); } };
+      r.readAsText(f);
+    });
+
+    // info
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     const info = {
       dataset: "Dataset: CSV or Iris; choose label & features.",
       encoder: "Encoder: map features to qubit rotations (Angle/Basis).",
       circuit: "Circuit: variational ansatz (RY/RealAmplitudes) + layers.",
       optimizer:"Optimizer: tune parameters (COBYLA).",
+<<<<<<< HEAD
       output:  "Output: accuracy, predictions, training accuracy graph, and loss graph."
     };
 
@@ -538,11 +735,21 @@ qnn = EstimatorQNN(qc)
       });
     });
 
+=======
+      output:  "Output: accuracy and optional predictions."
+    };
+    Array.from(document.querySelectorAll("[data-info]")).forEach(b => {
+      b.addEventListener("click",(e)=>{ e.preventDefault(); $("info-text").textContent = info[b.dataset.info] || ""; });
+    });
+
+    // bottom actions
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     const result = $("result");
     const codeBox = $("codePreview");
     const selectEncoding = $("select-encoding");
     const selectAnsatz   = $("select-ansatz");
     const inputLayers    = $("input-layers");
+<<<<<<< HEAD
     const executionModeSelect = $("execution-mode");
 
     on("btn-load-sample", () => {
@@ -569,6 +776,22 @@ qnn = EstimatorQNN(qc)
             label:"target",
             features:"sepal length, sepal width, petal length, petal width"
           }
+=======
+
+    on("btn-load-sample", () => {
+      // Update SPEC
+      spec.dataset = { type:"iris", path:null, label_column:"target",
+        feature_columns:["sepal length","sepal width","petal length","petal width"], test_size:0.2, seed:42 };
+      spec.circuit.num_qubits = 4; spec.circuit.reps = 1;
+
+      // Create/update Dataset node so it’s visible
+      let ds = model.nodes.find(n => (n.type||"").toLowerCase()==="dataset");
+      if (!ds) {
+        ds = {
+          id: nextId++, type:"dataset", name:"Dataset",
+          pos:{ x:20, y:20 },
+          params:{ path:"(Iris built-in)", label:"target", features:"sepal length, sepal width, petal length, petal width" }
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
         };
         model.nodes.push(ds);
       } else {
@@ -576,12 +799,20 @@ qnn = EstimatorQNN(qc)
         ds.params.label = "target";
         ds.params.features = "sepal length, sepal width, petal length, petal width";
       }
+<<<<<<< HEAD
 
       render();
       selectNode(ds.id);
       setMsg("Loaded Iris sample.", "ok");
     });
 
+=======
+      render(); selectNode(ds.id);
+      setMsg("Loaded Iris sample.", "ok");
+    });
+
+    // Dataset selection buttons
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     async function loadDataset(datasetName) {
       try {
         setMsg(`Loading ${datasetName} dataset...`);
@@ -589,6 +820,7 @@ qnn = EstimatorQNN(qc)
         const data = await resp.json();
         if (!resp.ok) throw new Error(data?.error || resp.statusText);
 
+<<<<<<< HEAD
         spec.dataset = {
           type: "csv",
           path: data.path,
@@ -611,6 +843,26 @@ qnn = EstimatorQNN(qc)
               label: data.label_column,
               features: data.feature_columns.join(", ")
             }
+=======
+        // Update SPEC for backend
+        spec.dataset = { 
+          type: "csv", 
+          path: data.path, 
+          label_column: data.label_column, 
+          feature_columns: data.feature_columns, 
+          test_size: 0.2, 
+          seed: 42 
+        };
+        spec.circuit.num_qubits = Math.max(1, Math.min(data.feature_columns.length, 4));
+
+        // Create/update Dataset node on canvas
+        let ds = model.nodes.find(n => (n.type||"").toLowerCase()==="dataset");
+        if (!ds) {
+          ds = {
+            id: nextId++, type:"dataset", name:"Dataset",
+            pos:{ x:20, y:20 },
+            params:{ path: data.path, label: data.label_column, features: data.feature_columns.join(", ") }
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
           };
           model.nodes.push(ds);
         } else {
@@ -619,12 +871,20 @@ qnn = EstimatorQNN(qc)
           ds.params.features = data.feature_columns.join(", ");
         }
 
+<<<<<<< HEAD
         render();
         selectNode(ds.id);
         result.textContent = JSON.stringify({ dataset: data.name, config: data }, null, 2);
         setMsg(`${datasetName} dataset loaded successfully!`, "ok");
       } catch (e) {
         setMsg(e.message || String(e), "err");
+=======
+        render(); selectNode(ds.id);
+        result.textContent = JSON.stringify({ dataset: data.name, config: data }, null, 2);
+        setMsg(`${datasetName} dataset loaded successfully!`, "ok");
+      } catch (e) { 
+        setMsg(e.message || String(e), "err"); 
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
       }
     }
 
@@ -635,6 +895,7 @@ qnn = EstimatorQNN(qc)
     on("btn-upload", async () => {
       try {
         const fileEl = $("csvFile");
+<<<<<<< HEAD
         const f = fileEl?.files?.[0];
         if (!f) return setMsg("Choose a .csv first.","err");
         if (!f.name.toLowerCase().endsWith(".csv")) return setMsg("Only .csv files allowed.","err");
@@ -658,20 +919,40 @@ qnn = EstimatorQNN(qc)
         };
         spec.circuit.num_qubits = Math.max(1, Math.min(features.length, 4));
 
+=======
+        const f = fileEl?.files?.[0]; if (!f) return setMsg("Choose a .csv first.","err");
+        if (!f.name.toLowerCase().endsWith(".csv")) return setMsg("Only .csv files allowed.","err");
+        setMsg("Uploading CSV…");
+        const form = new FormData(); form.append("file", f);
+        const resp = await fetch("http://localhost:5000/upload", { method:"POST", body: form });
+        const j = await resp.json(); if (!resp.ok) throw new Error(j?.error || resp.statusText);
+
+        const { label, features } = inferLabelAndFeatures(j.columns || []);
+        // Update SPEC for backend
+        spec.dataset = { type:"csv", path:j.path, label_column:label, feature_columns:features, test_size:0.2, seed:42 };
+        spec.circuit.num_qubits = Math.max(1, Math.min(features.length, 4));
+
+        // Update a Dataset node on canvas (first one found)
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
         const ds = model.nodes.find(n => (n.type||"").toLowerCase()==="dataset") || null;
         if (ds) {
           ds.params.path = j.path || "";
           ds.params.label = label || "";
           ds.params.features = features.join(", ");
+<<<<<<< HEAD
           if (selectedId === ds.id) {
             selectNode(ds.id);
           } else {
             render();
           }
+=======
+          if (selectedId === ds.id) selectNode(ds.id); else render();
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
         }
 
         result.textContent = JSON.stringify({ upload:j, chosen:{label, features} }, null, 2);
         setMsg(`Upload OK. Label=${label}; #features=${features.length}.`,"ok");
+<<<<<<< HEAD
       } catch (e) {
         setMsg(e.message || String(e), "err");
       }
@@ -681,6 +962,15 @@ qnn = EstimatorQNN(qc)
       if (!Array.isArray(cols) || cols.length===0) return { label:"", features:[] };
       const lower = cols.map(c => String(c||"").toLowerCase());
       const candidates = ["label","class","target","y","outcome"];
+=======
+        // Keep fileEl.value intact; clearing it is optional.
+      } catch (e) { setMsg(e.message || String(e), "err"); }
+    });
+    function inferLabelAndFeatures(cols){
+      if (!Array.isArray(cols) || cols.length===0) return { label:"", features:[] };
+      const lower = cols.map(c => String(c||"").toLowerCase());
+      const candidates = ["label","class","target","y","outcome","outcome"];
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
       let li = lower.findIndex(c => candidates.includes(c));
       if (li === -1) li = cols.length - 1;
       return { label: cols[li] || "", features: cols.filter((_,i) => i !== li) };
@@ -695,6 +985,7 @@ qnn = EstimatorQNN(qc)
     });
 
     on("btn-download-code", () => {
+<<<<<<< HEAD
       const url = URL.createObjectURL(new Blob([$(`codePreview`).textContent || ""], {type:"text/x-python"}));
       const a=document.createElement("a");
       a.href=url;
@@ -703,10 +994,15 @@ qnn = EstimatorQNN(qc)
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+=======
+      const url = URL.createObjectURL(new Blob([$("codePreview").textContent || ""], {type:"text/x-python"}));
+      const a=document.createElement("a"); a.href=url; a.download="generated_run.py"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     });
 
     on("btn-export", () => {
       const url = URL.createObjectURL(new Blob([JSON.stringify(spec,null,2)],{type:"application/json"}));
+<<<<<<< HEAD
       const a=document.createElement("a");
       a.href=url;
       a.download="pipeline.json";
@@ -714,6 +1010,9 @@ qnn = EstimatorQNN(qc)
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+=======
+      const a=document.createElement("a"); a.href=url; a.download="pipeline.json"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     });
 
     on("btn-generate-from-model", () => {
@@ -727,10 +1026,15 @@ qnn = EstimatorQNN(qc)
         const ds = map["dataset"];
         if (ds && ds.params){
           const rawFeats = ds.params.features;
+<<<<<<< HEAD
           const feats = typeof rawFeats === "string"
             ? rawFeats.split(",").map(s=>s.trim()).filter(Boolean)
             : Array.isArray(rawFeats) ? rawFeats : [];
 
+=======
+          const feats = typeof rawFeats === "string" ? rawFeats.split(",").map(s=>s.trim()).filter(Boolean)
+                       : Array.isArray(rawFeats) ? rawFeats : [];
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
           spec.dataset = {
             type: ds.params.path && ds.params.path !== "(Iris built-in)" ? "csv" : (spec.dataset?.type || "synthetic-line"),
             path: ds.params.path && ds.params.path !== "(Iris built-in)" ? ds.params.path : null,
@@ -740,30 +1044,45 @@ qnn = EstimatorQNN(qc)
             seed: 42
           };
         }
+<<<<<<< HEAD
 
         spec.encoder = { type: map["encoder"]?.params?.type || $("select-encoding").value };
         const cir = map["circuit"]?.params || {};
 
+=======
+        spec.encoder = { type: map["encoder"]?.params?.type || $("select-encoding").value };
+        const cir = map["circuit"]?.params || {};
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
         spec.circuit = {
           type: cir.type || $("select-ansatz").value,
           num_qubits: Number(cir.num_qubits || 2),
           reps: Number(cir.reps || $("input-layers").value || 1)
         };
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
         spec.optimizer = {
           type: map["optimizer"]?.params?.type || "cobyla",
           maxiter: Number(map["optimizer"]?.params?.maxiter || 15)
         };
+<<<<<<< HEAD
 
         $("codePreview").textContent = codeTemplate(spec);
         setMsg("Spec generated from model.","ok");
       } catch (e) {
         setMsg("Error generating from model: " + e.message, "err");
       }
+=======
+        $("codePreview").textContent = codeTemplate(spec);
+        setMsg("Spec generated from model.","ok");
+      } catch (e) { setMsg("Error generating from model: " + e.message, "err"); }
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     });
 
     on("btn-run", async () => {
       try {
+<<<<<<< HEAD
         setMsg("Running pipeline...");
         $("result").textContent = "Running…";
 
@@ -788,6 +1107,19 @@ qnn = EstimatorQNN(qc)
         setMsg(e.message || String(e), "err");
         $("result").textContent = "";
       }
+=======
+        setMsg(""); $("result").textContent = "Running…";
+        spec.circuit.num_qubits = Math.max(1, Math.min(Number(spec.circuit.num_qubits||4), 4));
+        spec.optimizer.maxiter  = Math.max(1, Math.min(Number(spec.optimizer.maxiter||15), 20));
+        const resp = await fetch("http://localhost:5000/run", {
+          method:"POST", headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify(spec)
+        });
+        const data = await resp.json(); if (!resp.ok) throw new Error(data?.error || resp.statusText);
+        $("result").textContent = JSON.stringify(data, null, 2);
+        setMsg("Pipeline finished.","ok");
+      } catch (e) { setMsg(e.message || String(e), "err"); $("result").textContent = ""; }
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     });
   });
 })();

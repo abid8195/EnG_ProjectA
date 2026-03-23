@@ -86,7 +86,11 @@ def _build_dataset(ds: Dict[str, Any]):
     else:
         raise ValueError(f"Unknown dataset type: {kind}")
 
+<<<<<<< HEAD
 def _run_pipeline_classical(spec: Dict[str, Any]) -> Dict[str, Any]:
+=======
+def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
     """
     Classical ML pipeline using LogisticRegression.
     Simple and robust - works with basic Python packages.
@@ -122,6 +126,7 @@ def _run_pipeline_classical(spec: Dict[str, Any]) -> Dict[str, Any]:
         predictions = clf.predict(Xte_scaled)
         out["predictions"] = predictions.tolist()[:20]  # limit output size
     
+<<<<<<< HEAD
     return out
 
 
@@ -390,3 +395,6 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
     if mode == "kipu_simulator":
         return _run_pipeline_kipu_simulator(spec)
     return _run_pipeline_classical(spec)
+=======
+    return out
+>>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
