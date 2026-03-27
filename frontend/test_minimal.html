@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QML Pipeline Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        button { padding: 10px; margin: 5px; }
+        #canvas { border: 1px solid #ccc; width: 600px; height: 400px; position: relative; background: #f9f9f9; }
+        .debug-info { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>QML Pipeline Test</h1>
+    
+    <div class="debug-info">
+        <h3>Backend Test</h3>
+        <button onclick="testBackend()">Test Backend Connection</button>
+        <div id="backend-status"></div>
+    </div>
+
+    <div class="debug-info">
+        <h3>Frontend Elements Test</h3>
+        <button onclick="testElements()">Check Elements</button>
+        <div id="elements-status"></div>
+    </div>
+
+    <div class="debug-info">
+        <h3>Add Node Test</h3>
+        <button id="add-dataset">Add Dataset</button>
+        <button id="add-encoder">Add Encoder</button>
+        <button id="add-circuit">Add Circuit</button>
+        <button onclick="testAddNode()">Test Add Node Function</button>
+        <div id="add-status"></div>
+    </div>
+
+    <div>
+        <div id="canvas">
+            <svg id="wires"></svg>
+            <!-- Nodes will be added here -->
+        </div>
+        <div id="msg"></div>
+        <div id="selected-info">No node selected</div>
+        <div id="node-params"></div>
+    </div>
+
+    <script>
+        async function testBackend() {
+            const status = document.getElementById('backend-status');
+            try {
+                const response = await fetch('http://127.0.0.1:5000/health');
+                if (response.ok) {
+                    const data = await response.json();
+                    status.innerHTML = `✅ Backend OK: ${JSON.stringify(data)}`;
+                } else {
+                    status.innerHTML = `❌ Backend error: ${response.status}`;
+                }
+            } catch (e) {
+                status.innerHTML = `❌ Backend not reachable: ${e.message}`;
+            }
+        }
+
+        function testElements() {
+            const status = document.getElementById('elements-status');
+            const elements = ['add-dataset', 'add-encoder', 'add-circuit', 'canvas', 'wires', 'msg'];
+            const results = elements.map(id => {
+                const el = document.getElementById(id);
+                return `${id}: ${el ? '✅' : '❌'}`;
+            }).join('<br>');
+            status.innerHTML = results;
+        }
+
+        function testAddNode() {
+            const status = document.getElementById('add-status');
+            status.innerHTML = 'Testing add node function...';
+            
+            // Test if we can manually trigger the add function
+            try {
+                if (typeof window.addNode === 'function') {
+                    status.innerHTML += '<br>✅ addNode function exists';
+                } else {
+                    status.innerHTML += '<br>❌ addNode function not found';
+                }
+            } catch (e) {
+                status.innerHTML += `<br>❌ Error: ${e.message}`;
+            }
+        }
+
+        // Load the main app.js
+        const script = document.createElement('script');
+        script.src = 'app.js';
+        script.onload = () => {
+            console.log('app.js loaded successfully');
+            document.getElementById('add-status').innerHTML = '✅ app.js loaded';
+        };
+        script.onerror = (e) => {
+            console.error('Failed to load app.js:', e);
+            document.getElementById('add-status').innerHTML = '❌ Failed to load app.js';
+        };
+        document.head.appendChild(script);
+
+        // Test elements after page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(testElements, 100);
+            setTimeout(testBackend, 200);
+        });
+    </script>
+</body>
+</html>

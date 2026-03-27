@@ -1,0 +1,30 @@
+QML Pipeline Instructions
+==========================
+
+Required dataset format:
+- CSV with a header row.
+- Numeric feature columns (non-numeric will be rejected or imputed as NaN).
+- One label column (string or numeric). Multiclass is temporarily reduced to two most frequent classes.
+
+How to use the UI (step-by-step):
+1) Upload your CSV via the Upload panel. The server saves it under backend/uploads.
+2) Choose label_column and feature_columns from the detected headers.
+3) Select num_qubits (the model will apply PCA to match this dimension).
+4) Pick reps for the RealAmplitudes ansatz and COBYLA max iterations.
+5) Click Run. The backend will train an EstimatorQNN and return accuracy and a small predictions preview.
+
+Preprocessing notes:
+- Missing values are imputed with median (per feature).
+- Features are standardized with StandardScaler.
+- PCA reduces/aligns feature dimension to num_qubits. If features < num_qubits, the model pads with zeros.
+- Multiclass datasets are simplified to a one-vs-one on the two most frequent classes.
+- Deterministic seed: algorithm_globals.random_seed = 42.
+
+Sample datasets and columns:
+- diabetes_small.csv: label 'Outcome'; example features ['Pregnancies','Glucose','BloodPressure','SkinThickness','Insulin','BMI','DiabetesPedigreeFunction','Age']
+- iris_like.csv: label 'species'; example features ['sepal_length','sepal_width','petal_length','petal_width']
+- wine_small.csv: label 'quality_label'; example features ['fixed_acidity','volatile_acidity','citric_acid','residual_sugar','chlorides','free_sulfur_dioxide','total_sulfur_dioxide','density','pH','sulphates','alcohol']
+
+Outputs:
+- On success: {"message": "Training complete", "accuracy": <float>, "predictions_preview": {y_true, y_pred}, shapes, num_qubits, reps}.
+- On error: HTTP 400 with {"error": <message>, "received_spec": {...}}.
