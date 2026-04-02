@@ -7,42 +7,50 @@
    - Training accuracy + loss charts integrated into dashboard
 */
 (function(){
-  // ---------- helpers ----------
   const $ = (id) => document.getElementById(id);
+
   const setMsg = (t, kind="info") => {
-    const m = $("msg"); if (!m) return;
+    const m = $("msg");
+    if (!m) return;
     m.textContent = t || "";
     m.style.color = kind === "err" ? "#ef4444" : kind === "ok" ? "#22c55e" : "#93a3b8";
   };
+
   const on = (id, fn) => {
-    const el = $(id); if (!el) return;
+    const el = $(id);
+    if (!el) return;
     el.addEventListener("click", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      try { fn(e); } catch (err) { console.error(err); setMsg(err.message || String(err), "err"); }
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        fn(e);
+      } catch (err) {
+        console.error(err);
+        setMsg(err.message || String(err), "err");
+      }
     });
   };
+
   const download = (name, text, mime="application/json") => {
     const url = URL.createObjectURL(new Blob([text], { type:mime }));
-    const a=document.createElement("a");
-    a.href=url;
-    a.download=name;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
   };
 
-  // ---------- state ----------
   const canvas = $("canvas");
   let model = { nodes: [], edges: [] };
   let selectedId = null;
-  let nextX=20, nextY=20, nextId=1;
-  let pendingSource = null; // for click–click wiring
+  let nextX = 20, nextY = 20, nextId = 1;
+  let pendingSource = null;
 
   let accuracyChart = null;
   let lossChart = null;
 
-  // SPEC used by backend / codegen
   const spec = {
     version: "0.1",
     pipeline: "qml-classifier",
@@ -54,7 +62,6 @@
     outputs: { return_predictions: true }
   };
 
-  // ---------- charts ----------
   function clearCharts() {
     if (accuracyChart) {
       accuracyChart.destroy();
@@ -67,10 +74,7 @@
   }
 
   function drawTrainingGraphs(metrics) {
-    if (!window.Chart) {
-      console.warn("Chart.js not loaded");
-      return;
-    }
+    if (!window.Chart) return;
 
     const accCanvas = $("accuracyChart");
     const lossCanvas = $("lossChart");
@@ -89,8 +93,8 @@
           data: Array.isArray(metrics.accuracy_history) ? metrics.accuracy_history : [],
           borderColor: "#22c55e",
           backgroundColor: "rgba(34,197,94,0.15)",
-          tension: 0.25,
           fill: true,
+          tension: 0.25,
           pointRadius: 3
         }]
       },
@@ -98,9 +102,6 @@
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 500 },
-        plugins: {
-          legend: { display: true }
-        },
         scales: {
           y: {
             beginAtZero: true,
@@ -122,8 +123,8 @@
           data: Array.isArray(metrics.loss_history) ? metrics.loss_history : [],
           borderColor: "#ef4444",
           backgroundColor: "rgba(239,68,68,0.15)",
-          tension: 0.25,
           fill: true,
+          tension: 0.25,
           pointRadius: 3
         }]
       },
@@ -131,9 +132,6 @@
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 500 },
-        plugins: {
-          legend: { display: true }
-        },
         scales: {
           y: {
             beginAtZero: true
@@ -159,7 +157,6 @@
     }
   }
 
-  // ---------- wiring ----------
   function addEdge(sourceId, targetId) {
     if (!model.edges.find(e => e.source === sourceId && e.target === targetId)) {
       model.edges.push({ source: sourceId, target: targetId, target_input: 0 });
@@ -218,7 +215,6 @@
     });
   }
 
-  // ---------- node rendering ----------
   function nodeHtml(title, fields=[]){
     let body = `<div class="node-title">${title}</div>`;
     body += `<div class="ports"></div>`;
@@ -245,7 +241,7 @@
 
     const portsWrap = el.querySelector(".ports");
     if (portsWrap) {
-      const inPort  = document.createElement("span");
+      const inPort = document.createElement("span");
       const outPort = document.createElement("span");
 
       inPort.className = "port in";
@@ -286,7 +282,7 @@
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
 
       dragging = true;
-      el.style.cursor="grabbing";
+      el.style.cursor = "grabbing";
       startX = e.clientX;
       startY = e.clientY;
 
@@ -295,7 +291,7 @@
       const cr = c.getBoundingClientRect();
 
       origX = r.left + c.scrollLeft - cr.left;
-      origY = r.top  + c.scrollTop  - cr.top;
+      origY = r.top + c.scrollTop - cr.top;
 
       document.addEventListener("mousemove", move);
       document.addEventListener("mouseup", up);
@@ -307,7 +303,6 @@
       const dy = e.clientY - startY;
       const nx = Math.max(0, origX + dx);
       const ny = Math.max(0, origY + dy);
-
       el.style.left = nx + "px";
       el.style.top = ny + "px";
       renderWires();
@@ -315,8 +310,8 @@
 
     const up = () => {
       if (!dragging) return;
-      dragging=false;
-      el.style.cursor="grab";
+      dragging = false;
+      el.style.cursor = "grab";
 
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
@@ -341,7 +336,6 @@
     renderWires();
   }
 
-  // ---------- selection + side panel ----------
   function selectNode(id){
     selectedId = id;
     render();
@@ -352,7 +346,7 @@
 
     if (!n){
       info.textContent = "Node not found.";
-      panel.innerHTML="";
+      panel.innerHTML = "";
       return;
     }
 
@@ -364,7 +358,6 @@
     )).join("");
   }
 
-  // ---------- add nodes ----------
   function addNode(type, title, defaults){
     const n = {
       id: nextId++,
@@ -386,7 +379,6 @@
     setMsg(`${title} node added.`, "ok");
   }
 
-  // ---------- export/import ----------
   function exportModel(){
     return JSON.parse(JSON.stringify(model));
   }
@@ -416,11 +408,10 @@
     }
   }
 
-  // ---------- code template ----------
   function codeTemplate(s){
     const enc = s.encoder.type === "basis" ? "PauliFeatureMap" : "ZZFeatureMap";
     const ans = s.circuit.type === "realamplitudes" ? "RealAmplitudes" : "RY";
-    const q   = Math.max(1, Math.min(Number(s.circuit.num_qubits||2), 4));
+    const q = Math.max(1, Math.min(Number(s.circuit.num_qubits||2), 4));
     const rep = Math.max(1, Number(s.circuit.reps||1));
 
     return `# Auto-generated Qiskit template
@@ -436,7 +427,6 @@ qnn = EstimatorQNN(qc)
 `;
   }
 
-  // ---------- toolbar bindings ----------
   document.addEventListener("DOMContentLoaded", () => {
     setMsg("Canvas ready. Add nodes from the toolbar.", "ok");
 
@@ -492,9 +482,9 @@ qnn = EstimatorQNN(qc)
     });
 
     on("btn-export-model", () => download("pipeline_model.json", JSON.stringify(exportModel(),null,2)));
-    on("btn-save-model",   () => download("node_canvas.json", JSON.stringify(exportModel(),null,2)));
-    on("btn-load-model",   () => $("file-load-model").click());
-    on("btn-load-model-ui",() => $("file-load-model").click());
+    on("btn-save-model", () => download("node_canvas.json", JSON.stringify(exportModel(),null,2)));
+    on("btn-load-model", () => $("file-load-model").click());
+    on("btn-load-model-ui", () => $("file-load-model").click());
 
     $("file-load-model").addEventListener("change", (ev) => {
       const f = ev.target.files && ev.target.files[0];
@@ -505,18 +495,18 @@ qnn = EstimatorQNN(qc)
         try {
           importModel(JSON.parse(r.result));
         } catch(e) {
-          setMsg("Failed to load model: "+e.message,"err");
+          setMsg("Failed to load model: " + e.message, "err");
         }
       };
       r.readAsText(f);
     });
 
     const info = {
-      dataset: "Dataset: CSV or Iris; choose label & features.",
+      dataset: "Dataset: CSV or Iris; choose label and features.",
       encoder: "Encoder: map features to qubit rotations (Angle/Basis).",
-      circuit: "Circuit: variational ansatz (RY/RealAmplitudes) + layers.",
-      optimizer:"Optimizer: tune parameters (COBYLA).",
-      output:  "Output: accuracy, predictions, training accuracy graph, and loss graph."
+      circuit: "Circuit: variational ansatz (RY/RealAmplitudes) with layers.",
+      optimizer:"Optimizer: tune parameters and control training epochs.",
+      output: "Output: accuracy, predictions, training accuracy graph, and loss graph."
     };
 
     Array.from(document.querySelectorAll("[data-info]")).forEach(b => {
@@ -529,8 +519,8 @@ qnn = EstimatorQNN(qc)
     const result = $("result");
     const codeBox = $("codePreview");
     const selectEncoding = $("select-encoding");
-    const selectAnsatz   = $("select-ansatz");
-    const inputLayers    = $("input-layers");
+    const selectAnsatz = $("select-ansatz");
+    const inputLayers = $("input-layers");
 
     on("btn-load-sample", () => {
       spec.dataset = {
@@ -626,7 +616,7 @@ qnn = EstimatorQNN(qc)
         if (!f) return setMsg("Choose a .csv first.","err");
         if (!f.name.toLowerCase().endsWith(".csv")) return setMsg("Only .csv files allowed.","err");
 
-        setMsg("Uploading CSV…");
+        setMsg("Uploading CSV...");
         const form = new FormData();
         form.append("file", f);
 
@@ -667,7 +657,7 @@ qnn = EstimatorQNN(qc)
     function inferLabelAndFeatures(cols){
       if (!Array.isArray(cols) || cols.length===0) return { label:"", features:[] };
       const lower = cols.map(c => String(c||"").toLowerCase());
-      const candidates = ["label","class","target","y","outcome"];
+      const candidates = ["label","class","target","y","outcome","species"];
       let li = lower.findIndex(c => candidates.includes(c));
       if (li === -1) li = cols.length - 1;
       return { label: cols[li] || "", features: cols.filter((_,i) => i !== li) };
@@ -682,10 +672,10 @@ qnn = EstimatorQNN(qc)
     });
 
     on("btn-download-code", () => {
-      const url = URL.createObjectURL(new Blob([$(`codePreview`).textContent || ""], {type:"text/x-python"}));
-      const a=document.createElement("a");
-      a.href=url;
-      a.download="generated_run.py";
+      const url = URL.createObjectURL(new Blob([$("codePreview").textContent || ""], {type:"text/x-python"}));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "generated_run.py";
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -694,9 +684,9 @@ qnn = EstimatorQNN(qc)
 
     on("btn-export", () => {
       const url = URL.createObjectURL(new Blob([JSON.stringify(spec,null,2)],{type:"application/json"}));
-      const a=document.createElement("a");
-      a.href=url;
-      a.download="pipeline.json";
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "pipeline.json";
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -715,7 +705,7 @@ qnn = EstimatorQNN(qc)
         if (ds && ds.params){
           const rawFeats = ds.params.features;
           const feats = typeof rawFeats === "string"
-            ? rawFeats.split(",").map(s=>s.trim()).filter(Boolean)
+            ? rawFeats.split(",").map(s => s.trim()).filter(Boolean)
             : Array.isArray(rawFeats) ? rawFeats : [];
 
           spec.dataset = {
@@ -752,7 +742,7 @@ qnn = EstimatorQNN(qc)
     on("btn-run", async () => {
       try {
         setMsg("Running pipeline...");
-        $("result").textContent = "Running…";
+        $("result").textContent = "Running...";
 
         spec.circuit.num_qubits = Math.max(1, Math.min(Number(spec.circuit.num_qubits||4), 4));
         spec.optimizer.maxiter  = Math.max(1, Math.min(Number(spec.optimizer.maxiter||15), 20));
@@ -768,7 +758,7 @@ qnn = EstimatorQNN(qc)
 
         $("result").textContent = JSON.stringify(data, null, 2);
         drawTrainingGraphs(data);
-        setMsg("Pipeline finished. Training metrics updated dynamically.", "ok");
+        setMsg("Pipeline finished. Dashboard metrics updated successfully.", "ok");
       } catch (e) {
         clearCharts();
         setMsg(e.message || String(e), "err");

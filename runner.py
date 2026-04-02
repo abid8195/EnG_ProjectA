@@ -17,7 +17,7 @@ def _build_dataset(ds: Dict[str, Any]):
     np.random.seed(seed)
     test_size = float(ds.get("test_size", 0.2))
     if not (0.05 <= test_size <= 0.5):
-      test_size = 0.2
+        test_size = 0.2
 
     kind = ds.get("type", "synthetic-line")
 
@@ -31,10 +31,8 @@ def _build_dataset(ds: Dict[str, Any]):
     elif kind == "iris":
         iris = datasets.load_iris()
         X_all, y_all = iris.data, iris.target
-
         feat_idx = ds.get("features", [0, 1, 2, 3])
         classes = ds.get("classes", [0, 1])
-
         mask = np.isin(y_all, classes)
         X = X_all[mask][:, feat_idx]
         y_raw = y_all[mask]
@@ -91,11 +89,7 @@ def _build_dataset(ds: Dict[str, Any]):
 
 def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Classical ML pipeline with tracked training metrics.
-    This version records:
-    - training accuracy history
-    - training loss history
-    - final train/test accuracy
+    Classical ML pipeline with tracked training metrics for the dashboard.
     """
     Xtr, Xte, ytr, yte = _build_dataset(spec.get("dataset", {}))
 
