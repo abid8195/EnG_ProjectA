@@ -1,23 +1,25 @@
 # Install with: python -m pip install -r requirements.txt
 
 # Web framework
-flask>=2.0.0
-flask-cors>=3.0.0
+flask>=2.3.0
+flask-cors>=4.0.0
 
-# Qiskit stack
-qiskit>=0.45.0
-qiskit-algorithms>=0.2.0
+# Qiskit stack (Sprint 2 tested minimums)
+qiskit>=1.0.0
+qiskit-algorithms>=0.3.0
 qiskit-machine-learning>=0.7.0
-qiskit-aer>=0.13.0
+qiskit-aer>=0.14.0          # local simulator fallback
+
+# Kipu Quantum Hub
 <<<<<<< HEAD
 qhub-quantum>=1.0.7
 =======
 >>>>>>> 9d1b400665006b6b0c73aa61d45b7355aac41cf1
 
 # Data science
-scikit-learn>=1.0.0
-numpy>=1.21.0
-pandas>=1.3.0
+scikit-learn>=1.3.0
+numpy>=1.24.0
+pandas>=2.0.0
 
 # Testing
-pytest>=7.0.0
+pytest>=7.4.0
