@@ -6,8 +6,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from dataset_catalog import DATASET_CONFIGS
-from runner import run_pipeline
-from quantum_runner import list_execution_backends
+from runners import get_runner, list_all_backends
 
 app = Flask(__name__)
 CORS(app)
@@ -59,7 +58,7 @@ def run():
     """
     try:
         spec = request.get_json(force=True)
-        out = run_pipeline(spec)
+        out = get_runner(spec).run(spec)
 
         if isinstance(out, dict) and "status" not in out:
             out["status"] = "ok"
@@ -126,7 +125,7 @@ def get_dataset(dataset_name):
 
 @app.route("/backends", methods=["GET"])
 def get_backends():
-    return jsonify(list_execution_backends())
+    return jsonify(list_all_backends())
 
 
 if __name__ == "__main__":
