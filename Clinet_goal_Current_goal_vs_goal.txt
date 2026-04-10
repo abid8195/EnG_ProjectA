@@ -1,7 +1,0 @@
-Client Goal (1 sentence)
-
-Build a SysML/MBD-inspired visual interface for modeling QML pipelines as connected blocks/flows, exporting a structured JSON pipeline specification, and auto-generating Qiskit/PennyLane template code, while integrating quantum simulators and applying the pipelines to datasets from Finance, Supply Chain, and Human Resources domains to address real-world data processing and optimisation challenges.
-
-Your Current Status vs Goal (1 sentence)
-
-You fulfill the visual block/flow modeling, JSON export, and Qiskit template code-generation components, partially fulfill dataset validation through a working classical backend with performance metrics, have identified and selected domain-specific datasets and quantum simulators for integration, but are still missing true end-to-end QML execution where the modeled encoder, circuit, and optimizer directly drive a quantum-based training and inference process.
