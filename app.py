@@ -10,41 +10,111 @@ app = Flask(__name__)
 CORS(app)
 
 
+def infer_label_column(columns):
+    """
+    Detect likely label column from uploaded or built-in dataset.
+    """
+    candidates = [
+        "label",
+        "class",
+        "target",
+        "y",
+        "outcome",
+        "species",
+        "result",
+        "prediction"
+    ]
+
+    lower_map = {
+        str(col).strip().lower(): col
+        for col in columns
+    }
+
+    for candidate in candidates:
+        if candidate in lower_map:
+            return lower_map[candidate]
+
+    return columns[-1] if columns else None
+
+
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({
+        "message": "QML DataFlow Studio backend is running",
+        "status": "ok"
+    })
+
+
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({
+        "status": "ok"
+    })
 
 
 @app.route("/upload", methods=["POST"])
 def upload():
     """
-    Save a CSV into backend/uploads and return its path and columns preview.
+    Upload CSV dataset.
+    Returns:
+    - path
+    - columns
+    - inferred label
+    - inferred feature columns
+    - dataset summary
+    - preview
     """
-    upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    upload_dir = os.path.join(
+        os.path.dirname(__file__),
+        "uploads"
+    )
+
     os.makedirs(upload_dir, exist_ok=True)
 
     if "file" not in request.files:
-        return jsonify({"error": "No file part"}), 400
+        return jsonify({
+            "error": "No file part"
+        }), 400
 
-    f = request.files["file"]
-    if not f.filename or not f.filename.lower().endswith(".csv"):
-        return jsonify({"error": "Please upload a .csv file"}), 400
+    file = request.files["file"]
 
-    dest = os.path.join(upload_dir, f.filename)
-    f.save(dest)
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        return jsonify({
+            "error": "Please upload a .csv file"
+        }), 400
+
+    destination = os.path.join(upload_dir, file.filename)
+    file.save(destination)
 
     try:
-        df = pd.read_csv(dest)
+        df = pd.read_csv(destination)
     except Exception as e:
-        return jsonify({"error": f"Failed to read CSV: {e}"}), 400
+        return jsonify({
+            "error": f"Failed to read CSV: {e}"
+        }), 400
 
-    cols = df.columns.tolist()
+    columns = df.columns.tolist()
+    label_column = infer_label_column(columns)
+    feature_columns = [
+        col for col in columns
+        if col != label_column
+    ]
+
     preview_rows = min(len(df), 5)
 
     return jsonify({
         "ok": True,
-        "path": f"uploads/{f.filename}",
-        "columns": cols,
+        "path": f"uploads/{file.filename}",
+        "columns": columns,
+        "label_column": label_column,
+        "feature_columns": feature_columns,
+        "dataset_summary": {
+            "dataset_type": "uploaded_csv",
+            "rows": int(len(df)),
+            "columns": len(columns),
+            "label_column": label_column,
+            "feature_columns": feature_columns
+        },
         "preview": df.head(preview_rows).to_dict(orient="records")
     })
 
@@ -52,16 +122,17 @@ def upload():
 @app.route("/run", methods=["POST"])
 def run():
     """
-    Run the pipeline and return training metrics for the dashboard.
+    Run pipeline and return dashboard-ready metrics.
     """
     try:
         spec = request.get_json(force=True)
-        out = run_pipeline(spec)
 
-        if isinstance(out, dict) and "status" not in out:
-            out["status"] = "ok"
+        output = run_pipeline(spec)
 
-        return jsonify(out)
+        if isinstance(output, dict) and "status" not in output:
+            output["status"] = "ok"
+
+        return jsonify(output)
 
     except ValueError as e:
         return jsonify({
@@ -80,20 +151,31 @@ def run():
 @app.route("/dataset/<dataset_name>", methods=["GET"])
 def get_dataset(dataset_name):
     """
-    Get predefined dataset information.
+    Return predefined dataset configuration.
     """
     try:
         dataset_configs = {
             "diabetes": {
                 "path": "datasets/diabetes.csv",
                 "label_column": "Outcome",
-                "feature_columns": ["Pregnancies", "Glucose", "BloodPressure", "BMI", "Age"],
+                "feature_columns": [
+                    "Pregnancies",
+                    "Glucose",
+                    "BloodPressure",
+                    "BMI",
+                    "Age"
+                ],
                 "description": "Diabetes prediction dataset"
             },
             "iris": {
                 "path": "datasets/iris.csv",
                 "label_column": "species",
-                "feature_columns": ["sepal_length", "sepal_width", "petal_length", "petal_width"],
+                "feature_columns": [
+                    "sepal_length",
+                    "sepal_width",
+                    "petal_length",
+                    "petal_width"
+                ],
                 "description": "Iris flower classification dataset"
             },
             "realestate": {
@@ -111,16 +193,24 @@ def get_dataset(dataset_name):
         }
 
         if dataset_name not in dataset_configs:
-            return jsonify({"error": f"Unknown dataset: {dataset_name}"}), 400
+            return jsonify({
+                "error": f"Unknown dataset: {dataset_name}"
+            }), 400
 
         config = dataset_configs[dataset_name]
-        dataset_path = os.path.join(os.path.dirname(__file__), config["path"])
+
+        dataset_path = os.path.join(
+            os.path.dirname(__file__),
+            config["path"]
+        )
 
         if not os.path.exists(dataset_path):
-            return jsonify({"error": f"Dataset file not found: {config['path']}"}), 404
+            return jsonify({
+                "error": f"Dataset file not found: {config['path']}"
+            }), 404
 
         df = pd.read_csv(dataset_path)
-        cols = df.columns.tolist()
+        columns = df.columns.tolist()
         preview_rows = min(len(df), 5)
 
         return jsonify({
@@ -129,8 +219,15 @@ def get_dataset(dataset_name):
             "path": config["path"],
             "label_column": config["label_column"],
             "feature_columns": config["feature_columns"],
-            "columns": cols,
+            "columns": columns,
             "description": config["description"],
+            "dataset_summary": {
+                "dataset_type": dataset_name,
+                "rows": int(len(df)),
+                "columns": len(columns),
+                "label_column": config["label_column"],
+                "feature_columns": config["feature_columns"]
+            },
             "preview": df.head(preview_rows).to_dict(orient="records")
         })
 
@@ -142,4 +239,8 @@ def get_dataset(dataset_name):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=True
+    )

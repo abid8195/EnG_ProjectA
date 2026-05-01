@@ -1,65 +1,94 @@
-/* QML DataFlow Studio — Built-in Canvas + SVG Wires (no Drawflow)
-   - Draggable nodes
-   - Click out-port → click in-port to connect (flows)
-   - Robust CSV upload updates Dataset block + spec
-   - Iris sample visibly configures Dataset block
-   - Null-safe model export/import, codegen, run
-   - Training accuracy + loss charts integrated into dashboard
-*/
-(function(){
+(function () {
   const $ = (id) => document.getElementById(id);
 
-  const setMsg = (t, kind="info") => {
-    const m = $("msg");
-    if (!m) return;
-    m.textContent = t || "";
-    m.style.color = kind === "err" ? "#ef4444" : kind === "ok" ? "#22c55e" : "#93a3b8";
+  const setMsg = (text, kind = "info") => {
+    const msg = $("msg");
+    if (!msg) return;
+
+    msg.textContent = text || "";
+    msg.style.color =
+      kind === "err" ? "#ef4444" :
+      kind === "ok" ? "#22c55e" :
+      "#93a3b8";
   };
 
   const on = (id, fn) => {
     const el = $(id);
     if (!el) return;
-    el.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
       try {
-        fn(e);
-      } catch (err) {
-        console.error(err);
-        setMsg(err.message || String(err), "err");
+        fn(event);
+      } catch (error) {
+        console.error(error);
+        setMsg(error.message || String(error), "err");
       }
     });
   };
 
-  const download = (name, text, mime="application/json") => {
-    const url = URL.createObjectURL(new Blob([text], { type:mime }));
+  const download = (filename, text, mime = "application/json") => {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+
     const a = document.createElement("a");
     a.href = url;
-    a.download = name;
+    a.download = filename;
+
     document.body.appendChild(a);
     a.click();
     a.remove();
+
     URL.revokeObjectURL(url);
   };
 
   const canvas = $("canvas");
-  let model = { nodes: [], edges: [] };
+
+  let model = {
+    nodes: [],
+    edges: []
+  };
+
   let selectedId = null;
-  let nextX = 20, nextY = 20, nextId = 1;
+  let nextX = 20;
+  let nextY = 20;
+  let nextId = 1;
   let pendingSource = null;
 
   let accuracyChart = null;
   let lossChart = null;
+  let lastMetrics = null;
 
   const spec = {
     version: "0.1",
     pipeline: "qml-classifier",
-    qnn: { type: "estimator" },
-    dataset: { type: "synthetic-line", num_samples: 24, num_features: 2, test_size: 0.2, seed: 42 },
-    encoder: { type: "angle" },
-    circuit: { type: "ry", num_qubits: 2, reps: 2 },
-    optimizer: { type: "cobyla", maxiter: 15 },
-    outputs: { return_predictions: true }
+    qnn: {
+      type: "estimator"
+    },
+    dataset: {
+      type: "synthetic-line",
+      num_samples: 24,
+      num_features: 2,
+      test_size: 0.2,
+      seed: 42
+    },
+    encoder: {
+      type: "angle"
+    },
+    circuit: {
+      type: "ry",
+      num_qubits: 2,
+      reps: 2
+    },
+    optimizer: {
+      type: "cobyla",
+      maxiter: 15
+    },
+    outputs: {
+      return_predictions: true
+    }
   };
 
   function clearCharts() {
@@ -67,48 +96,156 @@
       accuracyChart.destroy();
       accuracyChart = null;
     }
+
     if (lossChart) {
       lossChart.destroy();
       lossChart = null;
     }
   }
 
-  function drawTrainingGraphs(metrics) {
-    if (!window.Chart) return;
+  function validateExecutionResponse(data) {
+    const required = [
+      "accuracy_history",
+      "loss_history",
+      "epochs",
+      "train_accuracy",
+      "accuracy"
+    ];
 
-    const accCanvas = $("accuracyChart");
+    const missing = required.filter((key) => !(key in data));
+
+    if (missing.length > 0) {
+      throw new Error(
+        "Backend response missing metric fields: " + missing.join(", ")
+      );
+    }
+
+    if (!Array.isArray(data.accuracy_history)) {
+      throw new Error("accuracy_history must be an array");
+    }
+
+    if (!Array.isArray(data.loss_history)) {
+      throw new Error("loss_history must be an array");
+    }
+
+    if (data.accuracy_history.length === 0 || data.loss_history.length === 0) {
+      throw new Error("Backend returned empty metric history");
+    }
+
+    return true;
+  }
+
+  function formatNumber(value) {
+    return typeof value === "number" ? value.toFixed(4) : "N/A";
+  }
+
+  function updateDatasetSummary(summary) {
+    const box = $("dataset-summary");
+    if (!box) return;
+
+    if (!summary) {
+      box.innerHTML = `
+        <h3>Dataset Summary Preview</h3>
+        <p>Select a dataset or run the pipeline to view dataset information.</p>
+      `;
+      return;
+    }
+
+    const features = summary.feature_columns || [];
+    const dropped = summary.dropped_features || [];
+
+    box.innerHTML = `
+      <h3>Dataset Summary Preview</h3>
+      <p><strong>Dataset type:</strong> ${summary.dataset_type || "N/A"}</p>
+      <p><strong>Rows used:</strong> ${summary.rows_used ?? summary.rows ?? "N/A"}</p>
+      <p><strong>Label column:</strong> ${summary.label_column || "N/A"}</p>
+      <p><strong>Number of features:</strong> ${summary.num_features ?? features.length}</p>
+      <p><strong>Selected features:</strong> ${features.length ? features.join(", ") : "N/A"}</p>
+      ${
+        dropped.length
+          ? `<p><strong>Dropped non-numeric features:</strong> ${dropped.join(", ")}</p>`
+          : ""
+      }
+    `;
+  }
+
+  function updateTrainingSummary(metrics) {
+    const box = $("training-summary");
+    if (!box) return;
+
+    const summary = metrics.training_summary || {};
+
+    box.innerHTML = `
+      <div class="summary-card">
+        <strong>Status</strong>
+        <span>${summary.execution_status || "Completed"}</span>
+      </div>
+      <div class="summary-card">
+        <strong>Best Accuracy</strong>
+        <span>${formatNumber(summary.best_train_accuracy ?? metrics.best_train_accuracy)}</span>
+      </div>
+      <div class="summary-card">
+        <strong>Final Loss</strong>
+        <span>${formatNumber(summary.final_loss ?? metrics.final_loss)}</span>
+      </div>
+      <div class="summary-card">
+        <strong>Convergence</strong>
+        <span>${summary.convergence_status || metrics.convergence_status || "N/A"}</span>
+      </div>
+    `;
+  }
+
+  function drawTrainingGraphs(metrics) {
+    if (!window.Chart) {
+      throw new Error("Chart.js is not loaded");
+    }
+
+    validateExecutionResponse(metrics);
+
+    const accuracyCanvas = $("accuracyChart");
     const lossCanvas = $("lossChart");
-    if (!accCanvas || !lossCanvas) return;
+
+    if (!accuracyCanvas || !lossCanvas) return;
 
     clearCharts();
 
-    const epochs = Array.from({ length: Number(metrics.epochs || 0) }, (_, i) => i + 1);
+    const epochs = Array.from(
+      { length: Number(metrics.epochs || 0) },
+      (_, i) => i + 1
+    );
 
-    accuracyChart = new Chart(accCanvas.getContext("2d"), {
+    accuracyChart = new Chart(accuracyCanvas.getContext("2d"), {
       type: "line",
       data: {
         labels: epochs,
-        datasets: [{
-          label: "Training Accuracy",
-          data: Array.isArray(metrics.accuracy_history) ? metrics.accuracy_history : [],
-          borderColor: "#22c55e",
-          backgroundColor: "rgba(34,197,94,0.15)",
-          fill: true,
-          tension: 0.25,
-          pointRadius: 3
-        }]
+        datasets: [
+          {
+            label: "Training Accuracy",
+            data: metrics.accuracy_history,
+            borderColor: "#22c55e",
+            backgroundColor: "rgba(34,197,94,0.15)",
+            fill: true,
+            tension: 0.25,
+            pointRadius: 3
+          }
+        ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 500 },
+        animation: {
+          duration: 500
+        },
         scales: {
           y: {
             beginAtZero: true,
             suggestedMax: 1
           },
           x: {
-            title: { display: true, text: "Epoch" }
+            title: {
+              display: true,
+              text: "Epoch"
+            }
           }
         }
       }
@@ -118,401 +255,586 @@
       type: "line",
       data: {
         labels: epochs,
-        datasets: [{
-          label: "Training Loss",
-          data: Array.isArray(metrics.loss_history) ? metrics.loss_history : [],
-          borderColor: "#ef4444",
-          backgroundColor: "rgba(239,68,68,0.15)",
-          fill: true,
-          tension: 0.25,
-          pointRadius: 3
-        }]
+        datasets: [
+          {
+            label: "Training Loss",
+            data: metrics.loss_history,
+            borderColor: "#ef4444",
+            backgroundColor: "rgba(239,68,68,0.15)",
+            fill: true,
+            tension: 0.25,
+            pointRadius: 3
+          }
+        ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 500 },
+        animation: {
+          duration: 500
+        },
         scales: {
           y: {
             beginAtZero: true
           },
           x: {
-            title: { display: true, text: "Epoch" }
+            title: {
+              display: true,
+              text: "Epoch"
+            }
           }
         }
       }
     });
 
     const metricsBox = $("training-metrics");
-    if (metricsBox) {
-      const testAcc = typeof metrics.accuracy === "number" ? metrics.accuracy.toFixed(4) : "N/A";
-      const trainAcc = typeof metrics.train_accuracy === "number" ? metrics.train_accuracy.toFixed(4) : "N/A";
-      const epochsText = metrics.epochs ?? "N/A";
 
+    if (metricsBox) {
       metricsBox.innerHTML = `
-        <div class="metric-card"><strong>Train Accuracy</strong><span>${trainAcc}</span></div>
-        <div class="metric-card"><strong>Test Accuracy</strong><span>${testAcc}</span></div>
-        <div class="metric-card"><strong>Epochs</strong><span>${epochsText}</span></div>
+        <div class="metric-card">
+          <strong>Train Accuracy</strong>
+          <span>${formatNumber(metrics.train_accuracy)}</span>
+        </div>
+        <div class="metric-card">
+          <strong>Test Accuracy</strong>
+          <span>${formatNumber(metrics.accuracy)}</span>
+        </div>
+        <div class="metric-card">
+          <strong>Epochs</strong>
+          <span>${metrics.epochs ?? "N/A"}</span>
+        </div>
       `;
     }
+
+    updateTrainingSummary(metrics);
+    updateDatasetSummary(metrics.dataset_summary);
   }
 
   function addEdge(sourceId, targetId) {
-    if (!model.edges.find(e => e.source === sourceId && e.target === targetId)) {
-      model.edges.push({ source: sourceId, target: targetId, target_input: 0 });
+    if (!model.edges.find((e) => e.source === sourceId && e.target === targetId)) {
+      model.edges.push({
+        source: sourceId,
+        target: targetId,
+        target_input: 0
+      });
     }
+
     renderWires();
     setMsg(`Connected ${sourceId} → ${targetId}`, "ok");
   }
 
   function removeEdgesForNode(nodeId) {
-    model.edges = model.edges.filter(e => e.source !== nodeId && e.target !== nodeId);
+    model.edges = model.edges.filter(
+      (e) => e.source !== nodeId && e.target !== nodeId
+    );
+
     renderWires();
   }
 
   function renderWires() {
-    const svg = document.getElementById("wires");
+    const svg = $("wires");
     if (!svg) return;
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-    const canvasEl = document.getElementById("canvas");
+    while (svg.firstChild) {
+      svg.removeChild(svg.firstChild);
+    }
+
+    const canvasEl = $("canvas");
     if (!canvasEl) return;
+
     const canvasRect = canvasEl.getBoundingClientRect();
 
-    model.edges.forEach(e => {
-      const srcEl = document.querySelector(`.node[data-id="${e.source}"] .port.out`);
-      const tgtEl = document.querySelector(`.node[data-id="${e.target}"] .port.in`);
+    model.edges.forEach((edge) => {
+      const srcEl = document.querySelector(
+        `.node[data-id="${edge.source}"] .port.out`
+      );
+      const tgtEl = document.querySelector(
+        `.node[data-id="${edge.target}"] .port.in`
+      );
+
       if (!srcEl || !tgtEl) return;
 
       const s = srcEl.getBoundingClientRect();
       const t = tgtEl.getBoundingClientRect();
 
-      const x1 = s.left + s.width/2  - canvasRect.left + canvasEl.scrollLeft;
-      const y1 = s.top  + s.height/2 - canvasRect.top  + canvasEl.scrollTop;
-      const x2 = t.left + t.width/2  - canvasRect.left + canvasEl.scrollLeft;
-      const y2 = t.top  + t.height/2 - canvasRect.top  + canvasEl.scrollTop;
+      const x1 = s.left + s.width / 2 - canvasRect.left + canvasEl.scrollLeft;
+      const y1 = s.top + s.height / 2 - canvasRect.top + canvasEl.scrollTop;
+      const x2 = t.left + t.width / 2 - canvasRect.left + canvasEl.scrollLeft;
+      const y2 = t.top + t.height / 2 - canvasRect.top + canvasEl.scrollTop;
 
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const path = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "path"
+      );
+
       const dx = Math.max(40, Math.abs(x2 - x1) / 2);
-      const d = `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`;
+
+      const d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 
       path.setAttribute("d", d);
       path.setAttribute("fill", "none");
       path.setAttribute("stroke", "#2563eb");
       path.setAttribute("stroke-width", "3");
       path.setAttribute("stroke-linecap", "round");
-      path.style.filter = "drop-shadow(0 1px 2px rgba(0,0,0,0.1))";
-      path.style.strokeDasharray = "10,5";
-      path.style.strokeDashoffset = "15";
-      path.style.animation = "dash 0.5s linear forwards";
 
       svg.appendChild(path);
-
-      setTimeout(() => {
-        path.style.strokeDasharray = "none";
-        path.style.animation = "none";
-      }, 500);
     });
   }
 
-  function nodeHtml(title, fields=[]){
-    let body = `<div class="node-title">${title}</div>`;
-    body += `<div class="ports"></div>`;
-    fields.forEach(f => {
-      body += `<label class="node-param">${f.label}: <input data-param="${f.name}" value="${f.value ?? ""}" /></label>`;
+  function nodeHtml(title, fields = []) {
+    let html = `<div class="node-title">${title}</div>`;
+    html += `<div class="ports"></div>`;
+
+    fields.forEach((field) => {
+      html += `
+        <label class="node-param">
+          ${field.label}:
+          <input data-param="${field.name}" value="${field.value ?? ""}" />
+        </label>
+      `;
     });
-    return body;
+
+    return html;
   }
 
-  function createNodeEl(n){
+  function createNodeEl(node) {
     const el = document.createElement("div");
+
     el.className = "node";
-    el.style.left = (n.pos?.x ?? 20) + "px";
-    el.style.top  = (n.pos?.y ?? 20) + "px";
-    el.dataset.id = String(n.id);
+    el.style.left = (node.pos?.x ?? 20) + "px";
+    el.style.top = (node.pos?.y ?? 20) + "px";
+    el.dataset.id = String(node.id);
 
-    const fields = Object.entries(n.params||{}).map(([k,v]) => ({name:k,label:k,value:v}));
-    el.innerHTML = nodeHtml(n.name || n.type || "Node", fields);
+    const fields = Object.entries(node.params || {}).map(([key, value]) => ({
+      name: key,
+      label: key,
+      value
+    }));
 
-    const title = el.querySelector(".node-title");
-    if (title) {
-      title.textContent = n.name || n.type || "Node";
-    }
+    el.innerHTML = nodeHtml(node.name || node.type || "Node", fields);
 
     const portsWrap = el.querySelector(".ports");
+
     if (portsWrap) {
       const inPort = document.createElement("span");
       const outPort = document.createElement("span");
 
       inPort.className = "port in";
       outPort.className = "port out";
+
       inPort.title = "Connect input";
       outPort.title = "Connect output";
 
       portsWrap.appendChild(inPort);
       portsWrap.appendChild(outPort);
 
-      outPort.addEventListener("click", (e) => {
-        e.stopPropagation();
-        pendingSource = n.id;
-        setMsg(`Selected output of ${n.id}. Now click a target input.`, "info");
+      outPort.addEventListener("click", (event) => {
+        event.stopPropagation();
+        pendingSource = node.id;
+        setMsg(`Selected output of ${node.id}. Now click a target input.`);
       });
 
-      inPort.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (pendingSource && pendingSource !== n.id) addEdge(pendingSource, n.id);
+      inPort.addEventListener("click", (event) => {
+        event.stopPropagation();
+
+        if (pendingSource && pendingSource !== node.id) {
+          addEdge(pendingSource, node.id);
+        }
+
         pendingSource = null;
       });
     }
 
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
-      selectNode(n.id);
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectNode(node.id);
     });
 
-    enableDrag(el, n.id);
+    enableDrag(el, node.id);
+
     return el;
   }
 
-  function enableDrag(el, id){
-    let startX=0, startY=0, origX=0, origY=0, dragging=false;
+  function enableDrag(el, id) {
+    let startX = 0;
+    let startY = 0;
+    let origX = 0;
+    let origY = 0;
+    let dragging = false;
 
-    const down = (e) => {
-      const t = e.target;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    const down = (event) => {
+      const target = event.target;
+
+      if (
+        target &&
+        (
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable
+        )
+      ) {
+        return;
+      }
 
       dragging = true;
-      el.style.cursor = "grabbing";
-      startX = e.clientX;
-      startY = e.clientY;
+      startX = event.clientX;
+      startY = event.clientY;
 
-      const r = el.getBoundingClientRect();
-      const c = document.getElementById("canvas");
-      const cr = c.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      const canvasEl = $("canvas");
+      const canvasRect = canvasEl.getBoundingClientRect();
 
-      origX = r.left + c.scrollLeft - cr.left;
-      origY = r.top + c.scrollTop - cr.top;
+      origX = rect.left + canvasEl.scrollLeft - canvasRect.left;
+      origY = rect.top + canvasEl.scrollTop - canvasRect.top;
 
       document.addEventListener("mousemove", move);
       document.addEventListener("mouseup", up);
     };
 
-    const move = (e) => {
+    const move = (event) => {
       if (!dragging) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      const nx = Math.max(0, origX + dx);
-      const ny = Math.max(0, origY + dy);
-      el.style.left = nx + "px";
-      el.style.top = ny + "px";
+
+      const dx = event.clientX - startX;
+      const dy = event.clientY - startY;
+
+      const newX = Math.max(0, origX + dx);
+      const newY = Math.max(0, origY + dy);
+
+      el.style.left = newX + "px";
+      el.style.top = newY + "px";
+
       renderWires();
     };
 
     const up = () => {
       if (!dragging) return;
+
       dragging = false;
-      el.style.cursor = "grab";
 
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
 
-      const n = model.nodes.find(x => x.id === id);
-      if (n){
-        n.pos = { x: parseInt(el.style.left)||0, y: parseInt(el.style.top)||0 };
+      const node = model.nodes.find((n) => n.id === id);
+
+      if (node) {
+        node.pos = {
+          x: parseInt(el.style.left) || 0,
+          y: parseInt(el.style.top) || 0
+        };
       }
+
       renderWires();
     };
 
     el.addEventListener("mousedown", down);
   }
 
-  function render(){
-    canvas.innerHTML = '<svg id="wires"></svg>';
-    model.nodes.forEach(n => {
-      const el = createNodeEl(n);
-      if (n.id === selectedId) el.classList.add("selected");
+  function render() {
+    if (!canvas) return;
+
+    canvas.innerHTML = `<svg id="wires"></svg>`;
+
+    model.nodes.forEach((node) => {
+      const el = createNodeEl(node);
+
+      if (node.id === selectedId) {
+        el.classList.add("selected");
+      }
+
       canvas.appendChild(el);
     });
+
     renderWires();
   }
 
-  function selectNode(id){
+  function selectNode(id) {
     selectedId = id;
     render();
 
     const info = $("selected-info");
     const panel = $("node-params");
-    const n = model.nodes.find(x => x.id === id);
+    const node = model.nodes.find((n) => n.id === id);
 
-    if (!n){
+    if (!node) {
       info.textContent = "Node not found.";
       panel.innerHTML = "";
       return;
     }
 
-    info.textContent = `${n.name || n.type} (id ${n.id})`;
+    info.textContent = `${node.name || node.type} (id ${node.id})`;
 
-    const fields = Object.entries(n.params||{}).map(([k,v]) => ({name:k,label:k,value:v}));
-    panel.innerHTML = fields.map(f => (
-      `<label class="node-param">${f.label}: <input data-param="${f.name}" value="${f.value ?? ""}" /></label>`
-    )).join("");
+    const fields = Object.entries(node.params || {}).map(([key, value]) => ({
+      name: key,
+      label: key,
+      value
+    }));
+
+    panel.innerHTML = fields.map((field) => `
+      <label class="node-param">
+        ${field.label}:
+        <input data-param="${field.name}" value="${field.value ?? ""}" />
+      </label>
+    `).join("");
   }
 
-  function addNode(type, title, defaults){
-    const n = {
+  function addNode(type, title, defaults) {
+    const node = {
       id: nextId++,
       type,
       name: title,
-      pos: { x: nextX, y: nextY },
-      params: Object.fromEntries(defaults.map(d => [d.name, d.value ?? ""]))
+      pos: {
+        x: nextX,
+        y: nextY
+      },
+      params: Object.fromEntries(
+        defaults.map((item) => [item.name, item.value ?? ""])
+      )
     };
 
     nextX += 170;
-    if (nextX > 900){
+
+    if (nextX > 900) {
       nextX = 20;
       nextY += 170;
     }
 
-    model.nodes.push(n);
+    model.nodes.push(node);
     render();
-    selectNode(n.id);
+    selectNode(node.id);
     setMsg(`${title} node added.`, "ok");
   }
 
-  function exportModel(){
+  function exportModel() {
     return JSON.parse(JSON.stringify(model));
   }
 
-  function importModel(j){
-    if (j && Array.isArray(j.nodes)){
-      model = { nodes: [], edges: Array.isArray(j.edges) ? j.edges : [] };
-      j.nodes.forEach(orig => {
-        const n = {
-          id: Number(orig.id) || (nextId++),
-          type: (orig.type || "node").toString(),
-          name: (orig.name || orig.type || "Node").toString(),
-          pos: { x: Number(orig.pos?.x) || 10, y: Number(orig.pos?.y) || 10 },
-          params: typeof orig.params === "object" && orig.params ? orig.params : {}
-        };
-        model.nodes.push(n);
-      });
-
-      nextId = model.nodes.reduce((m, n) => Math.max(m, n.id), 0) + 1;
-      nextX = 20;
-      nextY = 20;
-      render();
-      selectedId = null;
-      $("selected-info").textContent = "Model loaded.";
-    } else {
+  function importModel(json) {
+    if (!json || !Array.isArray(json.nodes)) {
       throw new Error("Invalid model JSON");
     }
+
+    model = {
+      nodes: [],
+      edges: Array.isArray(json.edges) ? json.edges : []
+    };
+
+    json.nodes.forEach((original) => {
+      model.nodes.push({
+        id: Number(original.id) || nextId++,
+        type: (original.type || "node").toString(),
+        name: (original.name || original.type || "Node").toString(),
+        pos: {
+          x: Number(original.pos?.x) || 10,
+          y: Number(original.pos?.y) || 10
+        },
+        params: typeof original.params === "object" && original.params
+          ? original.params
+          : {}
+      });
+    });
+
+    nextId = model.nodes.reduce(
+      (max, node) => Math.max(max, node.id),
+      0
+    ) + 1;
+
+    nextX = 20;
+    nextY = 20;
+    selectedId = null;
+
+    render();
+
+    $("selected-info").textContent = "Model loaded.";
   }
 
-  function codeTemplate(s){
-    const enc = s.encoder.type === "basis" ? "PauliFeatureMap" : "ZZFeatureMap";
-    const ans = s.circuit.type === "realamplitudes" ? "RealAmplitudes" : "RY";
-    const q = Math.max(1, Math.min(Number(s.circuit.num_qubits||2), 4));
-    const rep = Math.max(1, Number(s.circuit.reps||1));
+  function codeTemplate(currentSpec) {
+    const encoder =
+      currentSpec.encoder.type === "basis"
+        ? "PauliFeatureMap"
+        : "ZZFeatureMap";
+
+    const ansatz =
+      currentSpec.circuit.type === "realamplitudes"
+        ? "RealAmplitudes"
+        : "RY";
+
+    const qubits = Math.max(
+      1,
+      Math.min(Number(currentSpec.circuit.num_qubits || 2), 4)
+    );
+
+    const reps = Math.max(
+      1,
+      Number(currentSpec.circuit.reps || 1)
+    );
 
     return `# Auto-generated Qiskit template
 from qiskit import QuantumCircuit
 from qiskit_machine_learning.neural_networks import EstimatorQNN
-from qiskit.circuit.library import ${enc}, ${ans}
+from qiskit.circuit.library import ${encoder}, ${ansatz}
 
-enc = ${enc}(feature_dimension=${q})
-var = ${ans}(num_qubits=${q}, reps=${rep})
-qc = QuantumCircuit(${q}); qc.compose(enc, inplace=True); qc.compose(var, inplace=True)
+enc = ${encoder}(feature_dimension=${qubits})
+var = ${ansatz}(num_qubits=${qubits}, reps=${reps})
+
+qc = QuantumCircuit(${qubits})
+qc.compose(enc, inplace=True)
+qc.compose(var, inplace=True)
+
 qnn = EstimatorQNN(qc)
-# Fit on your data (X,y) and report accuracy...
+# Fit on your data and report accuracy.
 `;
+  }
+
+  function updateDatasetNode(data) {
+    let datasetNode = model.nodes.find(
+      (node) => (node.type || "").toLowerCase() === "dataset"
+    );
+
+    if (!datasetNode) {
+      datasetNode = {
+        id: nextId++,
+        type: "dataset",
+        name: "Dataset",
+        pos: {
+          x: 20,
+          y: 20
+        },
+        params: {
+          path: data.path || "",
+          label: data.label_column || "",
+          features: (data.feature_columns || []).join(", ")
+        }
+      };
+
+      model.nodes.push(datasetNode);
+    } else {
+      datasetNode.params.path = data.path || "";
+      datasetNode.params.label = data.label_column || "";
+      datasetNode.params.features = (data.feature_columns || []).join(", ");
+    }
+
+    render();
+    selectNode(datasetNode.id);
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     setMsg("Canvas ready. Add nodes from the toolbar.", "ok");
 
-    on("add-dataset", () => addNode("dataset","Dataset",[
-      {name:"path",label:"CSV path",value:""},
-      {name:"label",label:"Label",value:""},
-      {name:"features",label:"Features (comma)",value:""}
+    on("add-dataset", () => addNode("dataset", "Dataset", [
+      { name: "path", label: "CSV path", value: "" },
+      { name: "label", label: "Label", value: "" },
+      { name: "features", label: "Features comma", value: "" }
     ]));
 
-    on("add-encoder", () => addNode("encoder","Encoder",[
-      {name:"type",label:"Type (angle/basis)",value:"angle"}
+    on("add-encoder", () => addNode("encoder", "Encoder", [
+      { name: "type", label: "Type angle/basis", value: "angle" }
     ]));
 
-    on("add-circuit", () => addNode("circuit","Circuit",[
-      {name:"type",label:"Type (ry/realamplitudes)",value:"ry"},
-      {name:"num_qubits",label:"#qubits",value:"2"},
-      {name:"reps",label:"layers",value:"1"}
+    on("add-circuit", () => addNode("circuit", "Circuit", [
+      { name: "type", label: "Type ry/realamplitudes", value: "ry" },
+      { name: "num_qubits", label: "qubits", value: "2" },
+      { name: "reps", label: "layers", value: "1" }
     ]));
 
-    on("add-optimizer", () => addNode("optimizer","Optimizer",[
-      {name:"type",label:"Type",value:"cobyla"},
-      {name:"maxiter",label:"Max iter",value:"15"}
+    on("add-optimizer", () => addNode("optimizer", "Optimizer", [
+      { name: "type", label: "Type", value: "cobyla" },
+      { name: "maxiter", label: "Max iter", value: "15" }
     ]));
 
-    on("add-output", () => addNode("output","Output",[
-      {name:"predictions",label:"Return predictions (true/false)",value:"true"}
+    on("add-output", () => addNode("output", "Output", [
+      { name: "predictions", label: "Return predictions", value: "true" }
     ]));
 
     on("btn-save-node", () => {
-      if (!selectedId) return setMsg("Select a node first.","err");
-      const n = model.nodes.find(x => x.id === selectedId);
-      if (!n) return setMsg("Node not found.","err");
+      if (!selectedId) {
+        return setMsg("Select a node first.", "err");
+      }
+
+      const node = model.nodes.find((n) => n.id === selectedId);
+
+      if (!node) {
+        return setMsg("Node not found.", "err");
+      }
 
       const inputs = document.querySelectorAll("#node-params [data-param]");
-      inputs.forEach(inp => {
-        n.params[inp.getAttribute("data-param")] = inp.value;
+
+      inputs.forEach((input) => {
+        node.params[input.getAttribute("data-param")] = input.value;
       });
 
       render();
-      selectNode(n.id);
-      setMsg("Node saved.","ok");
+      selectNode(node.id);
+      setMsg("Node saved.", "ok");
     });
 
     on("btn-delete-node", () => {
-      if (!selectedId) return setMsg("Select a node first.","err");
+      if (!selectedId) {
+        return setMsg("Select a node first.", "err");
+      }
+
       removeEdgesForNode(selectedId);
-      model.nodes = model.nodes.filter(x => x.id !== selectedId);
+
+      model.nodes = model.nodes.filter(
+        (node) => node.id !== selectedId
+      );
+
       selectedId = null;
+
       render();
+
       $("node-params").innerHTML = "";
       $("selected-info").textContent = "No node selected.";
-      setMsg("Node deleted.","ok");
+
+      setMsg("Node deleted.", "ok");
     });
 
-    on("btn-export-model", () => download("pipeline_model.json", JSON.stringify(exportModel(),null,2)));
-    on("btn-save-model", () => download("node_canvas.json", JSON.stringify(exportModel(),null,2)));
+    on("btn-export-model", () => {
+      download(
+        "pipeline_model.json",
+        JSON.stringify(exportModel(), null, 2)
+      );
+    });
+
+    on("btn-save-model", () => {
+      download(
+        "node_canvas.json",
+        JSON.stringify(exportModel(), null, 2)
+      );
+    });
+
     on("btn-load-model", () => $("file-load-model").click());
     on("btn-load-model-ui", () => $("file-load-model").click());
 
-    $("file-load-model").addEventListener("change", (ev) => {
-      const f = ev.target.files && ev.target.files[0];
-      if (!f) return;
+    $("file-load-model").addEventListener("change", (event) => {
+      const file = event.target.files && event.target.files[0];
 
-      const r = new FileReader();
-      r.onload = () => {
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onload = () => {
         try {
-          importModel(JSON.parse(r.result));
-        } catch(e) {
-          setMsg("Failed to load model: " + e.message, "err");
+          importModel(JSON.parse(reader.result));
+        } catch (error) {
+          setMsg("Failed to load model: " + error.message, "err");
         }
       };
-      r.readAsText(f);
+
+      reader.readAsText(file);
     });
 
     const info = {
-      dataset: "Dataset: CSV or Iris; choose label and features.",
-      encoder: "Encoder: map features to qubit rotations (Angle/Basis).",
-      circuit: "Circuit: variational ansatz (RY/RealAmplitudes) with layers.",
-      optimizer:"Optimizer: tune parameters and control training epochs.",
-      output: "Output: accuracy, predictions, training accuracy graph, and loss graph."
+      dataset: "Dataset block selects CSV or built-in data and validates label/features before execution.",
+      encoder: "Encoder maps features to quantum-style rotations.",
+      circuit: "Circuit defines the model ansatz and number of layers.",
+      optimizer: "Optimizer controls training iterations.",
+      output: "Output displays accuracy, loss, predictions, dataset summary, and exportable metrics."
     };
 
-    Array.from(document.querySelectorAll("[data-info]")).forEach(b => {
-      b.addEventListener("click",(e)=>{
-        e.preventDefault();
-        $("info-text").textContent = info[b.dataset.info] || "";
+    Array.from(document.querySelectorAll("[data-info]")).forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        $("info-text").textContent = info[button.dataset.info] || "";
       });
     });
 
@@ -522,49 +844,19 @@ qnn = EstimatorQNN(qc)
     const selectAnsatz = $("select-ansatz");
     const inputLayers = $("input-layers");
 
-    on("btn-load-sample", () => {
-      spec.dataset = {
-        type:"iris",
-        path:null,
-        label_column:"target",
-        feature_columns:["sepal length","sepal width","petal length","petal width"],
-        test_size:0.2,
-        seed:42
-      };
-      spec.circuit.num_qubits = 4;
-      spec.circuit.reps = 1;
-
-      let ds = model.nodes.find(n => (n.type||"").toLowerCase()==="dataset");
-      if (!ds) {
-        ds = {
-          id: nextId++,
-          type:"dataset",
-          name:"Dataset",
-          pos:{ x:20, y:20 },
-          params:{
-            path:"(Iris built-in)",
-            label:"target",
-            features:"sepal length, sepal width, petal length, petal width"
-          }
-        };
-        model.nodes.push(ds);
-      } else {
-        ds.params.path = "(Iris built-in)";
-        ds.params.label = "target";
-        ds.params.features = "sepal length, sepal width, petal length, petal width";
-      }
-
-      render();
-      selectNode(ds.id);
-      setMsg("Loaded Iris sample.", "ok");
-    });
-
     async function loadDataset(datasetName) {
       try {
         setMsg(`Loading ${datasetName} dataset...`);
-        const resp = await fetch(`http://localhost:5000/dataset/${datasetName}`);
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data?.error || resp.statusText);
+
+        const response = await fetch(
+          `http://localhost:5000/dataset/${datasetName}`
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || response.statusText);
+        }
 
         spec.dataset = {
           type: "csv",
@@ -574,34 +866,30 @@ qnn = EstimatorQNN(qc)
           test_size: 0.2,
           seed: 42
         };
-        spec.circuit.num_qubits = Math.max(1, Math.min(data.feature_columns.length, 4));
 
-        let ds = model.nodes.find(n => (n.type||"").toLowerCase()==="dataset");
-        if (!ds) {
-          ds = {
-            id: nextId++,
-            type:"dataset",
-            name:"Dataset",
-            pos:{ x:20, y:20 },
-            params:{
-              path: data.path,
-              label: data.label_column,
-              features: data.feature_columns.join(", ")
-            }
-          };
-          model.nodes.push(ds);
-        } else {
-          ds.params.path = data.path;
-          ds.params.label = data.label_column;
-          ds.params.features = data.feature_columns.join(", ");
-        }
+        spec.circuit.num_qubits = Math.max(
+          1,
+          Math.min(data.feature_columns.length, 4)
+        );
 
-        render();
-        selectNode(ds.id);
-        result.textContent = JSON.stringify({ dataset: data.name, config: data }, null, 2);
-        setMsg(`${datasetName} dataset loaded successfully!`, "ok");
-      } catch (e) {
-        setMsg(e.message || String(e), "err");
+        updateDatasetNode(data);
+        updateDatasetSummary(data.dataset_summary);
+
+        result.textContent = JSON.stringify(
+          {
+            dataset: data.name,
+            config: data
+          },
+          null,
+          2
+        );
+
+        setMsg(
+          `${datasetName} dataset loaded successfully. Dataset summary updated.`,
+          "ok"
+        );
+      } catch (error) {
+        setMsg(error.message || String(error), "err");
       }
     }
 
@@ -611,120 +899,175 @@ qnn = EstimatorQNN(qc)
 
     on("btn-upload", async () => {
       try {
-        const fileEl = $("csvFile");
-        const f = fileEl?.files?.[0];
-        if (!f) return setMsg("Choose a .csv first.","err");
-        if (!f.name.toLowerCase().endsWith(".csv")) return setMsg("Only .csv files allowed.","err");
+        const fileInput = $("csvFile");
+        const file = fileInput?.files?.[0];
 
-        setMsg("Uploading CSV...");
-        const form = new FormData();
-        form.append("file", f);
-
-        const resp = await fetch("http://localhost:5000/upload", { method:"POST", body: form });
-        const j = await resp.json();
-        if (!resp.ok) throw new Error(j?.error || resp.statusText);
-
-        const { label, features } = inferLabelAndFeatures(j.columns || []);
-        spec.dataset = {
-          type:"csv",
-          path:j.path,
-          label_column:label,
-          feature_columns:features,
-          test_size:0.2,
-          seed:42
-        };
-        spec.circuit.num_qubits = Math.max(1, Math.min(features.length, 4));
-
-        const ds = model.nodes.find(n => (n.type||"").toLowerCase()==="dataset") || null;
-        if (ds) {
-          ds.params.path = j.path || "";
-          ds.params.label = label || "";
-          ds.params.features = features.join(", ");
-          if (selectedId === ds.id) {
-            selectNode(ds.id);
-          } else {
-            render();
-          }
+        if (!file) {
+          return setMsg("Choose a .csv first.", "err");
         }
 
-        result.textContent = JSON.stringify({ upload:j, chosen:{label, features} }, null, 2);
-        setMsg(`Upload OK. Label=${label}; #features=${features.length}.`,"ok");
-      } catch (e) {
-        setMsg(e.message || String(e), "err");
+        if (!file.name.toLowerCase().endsWith(".csv")) {
+          return setMsg("Only .csv files allowed.", "err");
+        }
+
+        setMsg("Uploading CSV...");
+
+        const form = new FormData();
+        form.append("file", file);
+
+        const response = await fetch("http://localhost:5000/upload", {
+          method: "POST",
+          body: form
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || response.statusText);
+        }
+
+        spec.dataset = {
+          type: "csv",
+          path: data.path,
+          label_column: data.label_column,
+          feature_columns: data.feature_columns,
+          test_size: 0.2,
+          seed: 42
+        };
+
+        spec.circuit.num_qubits = Math.max(
+          1,
+          Math.min(data.feature_columns.length, 4)
+        );
+
+        updateDatasetNode(data);
+        updateDatasetSummary(data.dataset_summary);
+
+        result.textContent = JSON.stringify(
+          {
+            upload: data
+          },
+          null,
+          2
+        );
+
+        setMsg(
+          `Upload OK. Label=${data.label_column}; #features=${data.feature_columns.length}.`,
+          "ok"
+        );
+      } catch (error) {
+        setMsg(error.message || String(error), "err");
       }
     });
-
-    function inferLabelAndFeatures(cols){
-      if (!Array.isArray(cols) || cols.length===0) return { label:"", features:[] };
-      const lower = cols.map(c => String(c||"").toLowerCase());
-      const candidates = ["label","class","target","y","outcome","species"];
-      let li = lower.findIndex(c => candidates.includes(c));
-      if (li === -1) li = cols.length - 1;
-      return { label: cols[li] || "", features: cols.filter((_,i) => i !== li) };
-    }
 
     on("btn-generate", () => {
       spec.encoder.type = selectEncoding.value;
       spec.circuit.type = selectAnsatz.value;
       spec.circuit.reps = Number(inputLayers.value || 1);
+
       codeBox.textContent = codeTemplate(spec);
-      setMsg("Code template generated.","ok");
+
+      setMsg("Code template generated.", "ok");
     });
 
     on("btn-download-code", () => {
-      const url = URL.createObjectURL(new Blob([$("codePreview").textContent || ""], {type:"text/x-python"}));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "generated_run.py";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      download(
+        "generated_run.py",
+        $("codePreview").textContent || "",
+        "text/x-python"
+      );
     });
 
     on("btn-export", () => {
-      const url = URL.createObjectURL(new Blob([JSON.stringify(spec,null,2)],{type:"application/json"}));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "pipeline.json";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      download(
+        "pipeline.json",
+        JSON.stringify(spec, null, 2),
+        "application/json"
+      );
+    });
+
+    on("btn-download-metrics", () => {
+      if (!lastMetrics) {
+        return setMsg(
+          "Run the pipeline first before downloading metrics.",
+          "err"
+        );
+      }
+
+      const exportPayload = {
+        exported_at: new Date().toISOString(),
+        dataset_summary: lastMetrics.dataset_summary,
+        training_summary: lastMetrics.training_summary,
+        accuracy_history: lastMetrics.accuracy_history,
+        loss_history: lastMetrics.loss_history,
+        epochs: lastMetrics.epochs,
+        spec_echo: lastMetrics.spec_echo
+      };
+
+      download(
+        "training_metrics.json",
+        JSON.stringify(exportPayload, null, 2),
+        "application/json"
+      );
+
+      setMsg("Training metrics exported successfully.", "ok");
     });
 
     on("btn-generate-from-model", () => {
       try {
         const map = {};
-        model.nodes.forEach(n => {
-          const key = (n?.type || n?.name || "node").toString().toLowerCase();
-          map[key] = n;
+
+        model.nodes.forEach((node) => {
+          const key = (node?.type || node?.name || "node")
+            .toString()
+            .toLowerCase();
+
+          map[key] = node;
         });
 
-        const ds = map["dataset"];
-        if (ds && ds.params){
-          const rawFeats = ds.params.features;
-          const feats = typeof rawFeats === "string"
-            ? rawFeats.split(",").map(s => s.trim()).filter(Boolean)
-            : Array.isArray(rawFeats) ? rawFeats : [];
+        const datasetNode = map["dataset"];
+
+        if (datasetNode && datasetNode.params) {
+          const rawFeatures = datasetNode.params.features;
+
+          const features =
+            typeof rawFeatures === "string"
+              ? rawFeatures.split(",").map((s) => s.trim()).filter(Boolean)
+              : Array.isArray(rawFeatures)
+                ? rawFeatures
+                : [];
 
           spec.dataset = {
-            type: ds.params.path && ds.params.path !== "(Iris built-in)" ? "csv" : (spec.dataset?.type || "synthetic-line"),
-            path: ds.params.path && ds.params.path !== "(Iris built-in)" ? ds.params.path : null,
-            label_column: ds.params.label || spec.dataset?.label_column || "label",
-            feature_columns: feats,
+            type:
+              datasetNode.params.path &&
+              datasetNode.params.path !== "(Iris built-in)"
+                ? "csv"
+                : spec.dataset?.type || "synthetic-line",
+            path:
+              datasetNode.params.path &&
+              datasetNode.params.path !== "(Iris built-in)"
+                ? datasetNode.params.path
+                : null,
+            label_column:
+              datasetNode.params.label ||
+              spec.dataset?.label_column ||
+              "label",
+            feature_columns: features,
             test_size: 0.2,
             seed: 42
           };
         }
 
-        spec.encoder = { type: map["encoder"]?.params?.type || $("select-encoding").value };
-        const cir = map["circuit"]?.params || {};
+        spec.encoder = {
+          type: map["encoder"]?.params?.type || $("select-encoding").value
+        };
+
+        const circuitParams = map["circuit"]?.params || {};
 
         spec.circuit = {
-          type: cir.type || $("select-ansatz").value,
-          num_qubits: Number(cir.num_qubits || 2),
-          reps: Number(cir.reps || $("input-layers").value || 1)
+          type: circuitParams.type || $("select-ansatz").value,
+          num_qubits: Number(circuitParams.num_qubits || 2),
+          reps: Number(circuitParams.reps || $("input-layers").value || 1)
         };
 
         spec.optimizer = {
@@ -733,36 +1076,61 @@ qnn = EstimatorQNN(qc)
         };
 
         $("codePreview").textContent = codeTemplate(spec);
-        setMsg("Spec generated from model.","ok");
-      } catch (e) {
-        setMsg("Error generating from model: " + e.message, "err");
+
+        setMsg("Spec generated from model.", "ok");
+      } catch (error) {
+        setMsg(
+          "Error generating from model: " + error.message,
+          "err"
+        );
       }
     });
 
     on("btn-run", async () => {
       try {
-        setMsg("Running pipeline...");
-        $("result").textContent = "Running...";
+        setMsg("Validating and running pipeline...");
+        result.textContent = "Running...";
 
-        spec.circuit.num_qubits = Math.max(1, Math.min(Number(spec.circuit.num_qubits||4), 4));
-        spec.optimizer.maxiter  = Math.max(1, Math.min(Number(spec.optimizer.maxiter||15), 20));
+        spec.circuit.num_qubits = Math.max(
+          1,
+          Math.min(Number(spec.circuit.num_qubits || 4), 4)
+        );
 
-        const resp = await fetch("http://localhost:5000/run", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
+        spec.optimizer.maxiter = Math.max(
+          1,
+          Math.min(Number(spec.optimizer.maxiter || 15), 20)
+        );
+
+        const response = await fetch("http://localhost:5000/run", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify(spec)
         });
 
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data?.error || resp.statusText);
+        const data = await response.json();
 
-        $("result").textContent = JSON.stringify(data, null, 2);
+        if (!response.ok) {
+          throw new Error(data?.error || response.statusText);
+        }
+
+        validateExecutionResponse(data);
+
+        lastMetrics = data;
+
+        result.textContent = JSON.stringify(data, null, 2);
+
         drawTrainingGraphs(data);
-        setMsg("Pipeline finished. Dashboard metrics updated successfully.", "ok");
-      } catch (e) {
+
+        setMsg(
+          "Pipeline finished. Dataset summary, training summary, and charts updated successfully.",
+          "ok"
+        );
+      } catch (error) {
         clearCharts();
-        setMsg(e.message || String(e), "err");
-        $("result").textContent = "";
+        setMsg(error.message || String(error), "err");
+        result.textContent = "";
       }
     });
   });
