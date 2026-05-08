@@ -143,6 +143,135 @@
       to { stroke-dashoffset: 0; }
     }
 
+    /* ── Use-Case Cards ──────────────────────────────────── */
+    .usecase-section {
+      margin-top: 18px;
+    }
+
+    .usecase-section h3 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      letter-spacing: .02em;
+      color: #334155;
+    }
+
+    .usecase-cards {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .usecase-card {
+      flex: 1 1 180px;
+      min-width: 160px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 14px 16px;
+      background: #fff;
+      cursor: pointer;
+      transition: border-color .18s, box-shadow .18s, transform .15s;
+      position: relative;
+      outline: none;
+    }
+
+    .usecase-card:hover {
+      border-color: #6366f1;
+      box-shadow: 0 4px 18px rgba(99,102,241,.14);
+      transform: translateY(-2px);
+    }
+
+    .usecase-card.active {
+      border-color: #4f46e5;
+      background: linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%);
+      box-shadow: 0 4px 18px rgba(79,70,229,.18);
+    }
+
+    .usecase-card.active-finance {
+      border-color: #0ea5e9;
+      background: linear-gradient(135deg,#f0f9ff 0%,#e0f2fe 100%);
+      box-shadow: 0 4px 18px rgba(14,165,233,.18);
+    }
+
+    .usecase-card.active-hr {
+      border-color: #a855f7;
+      background: linear-gradient(135deg,#faf5ff 0%,#ede9fe 100%);
+      box-shadow: 0 4px 18px rgba(168,85,247,.18);
+    }
+
+    .usecase-card.active-supply {
+      border-color: #10b981;
+      background: linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%);
+      box-shadow: 0 4px 18px rgba(16,185,129,.18);
+    }
+
+    .usecase-icon {
+      font-size: 26px;
+      margin-bottom: 6px;
+      line-height: 1;
+    }
+
+    .usecase-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 2px;
+    }
+
+    .usecase-sub {
+      font-size: 11.5px;
+      color: #64748b;
+    }
+
+    /* ── Business Objective Panel ────────────────────────── */
+    #objective-panel {
+      display: none;
+      margin-top: 10px;
+      border-radius: 10px;
+      padding: 12px 16px;
+      background: linear-gradient(135deg,#f8fafc,#f1f5f9);
+      border: 1px solid #cbd5e1;
+      animation: fadeSlideIn .25s ease;
+    }
+
+    #objective-panel.visible { display: block; }
+
+    @keyframes fadeSlideIn {
+      from { opacity:0; transform:translateY(-6px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    .obj-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+
+    .obj-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1e293b;
+      line-height: 1.45;
+    }
+
+    .obj-pipeline-tags {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .obj-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      color: #475569;
+      font-weight: 500;
+    }
+
     .dashboard-section {
       margin-top: 18px;
       background: #fff;
@@ -296,12 +425,38 @@
         </div>
       </div>
 
-      <div class="panel" style="margin-top:12px">
-        <h3>Domain Dataset Selection</h3>
-        <div style="margin-bottom: 10px;">
-          <button type="button" class="btn" id="btn-finance">Finance Risk Dataset</button>
-          <button type="button" class="btn" id="btn-supply-chain">Supply Chain Dataset</button>
-          <button type="button" class="btn" id="btn-hr">HR Attrition Dataset</button>
+      <div class="panel usecase-section" style="margin-top:12px">
+        <h3>Use-Case Workflows</h3>
+        <div class="usecase-cards">
+
+          <button type="button" class="usecase-card" id="btn-finance"
+                  aria-label="Load Finance use-case" data-usecase="finance">
+            <div class="usecase-icon">📈</div>
+            <div class="usecase-title">Finance</div>
+            <div class="usecase-sub">Portfolio Risk Triage</div>
+          </button>
+
+          <button type="button" class="usecase-card" id="btn-hr"
+                  aria-label="Load HR use-case" data-usecase="hr">
+            <div class="usecase-icon">👥</div>
+            <div class="usecase-title">Human Resources</div>
+            <div class="usecase-sub">Attrition &amp; Retention</div>
+          </button>
+
+          <button type="button" class="usecase-card" id="btn-supply-chain"
+                  aria-label="Load Supply Chain use-case" data-usecase="supply_chain">
+            <div class="usecase-icon">🚚</div>
+            <div class="usecase-title">Supply Chain</div>
+            <div class="usecase-sub">Disruption Risk</div>
+          </button>
+
+        </div>
+
+        <!-- Business Objective panel (filled by JS) -->
+        <div id="objective-panel">
+          <div class="obj-label">Business Objective</div>
+          <div class="obj-text" id="objective-text"></div>
+          <div class="obj-pipeline-tags" id="objective-tags"></div>
         </div>
 
         <h3>Execution Setup</h3>

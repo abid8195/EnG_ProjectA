@@ -64,6 +64,56 @@
     outputs: { return_predictions: true }
   };
 
+  // ── Use-Case Workflows ─────────────────────────────────────────────────────
+  // Each entry: dataset key, recommended pipeline config, and business objective.
+  const USE_CASES = {
+    finance: {
+      datasetKey: "finance",
+      objective: "Classify risk_flag for early portfolio risk triage — enabling proactive capital allocation before adverse events materialise.",
+      pipeline: {
+        framework:  "qiskit",
+        encoding:   "angle",
+        ansatz:     "realamplitudes",
+        optimizer:  "cobyla",
+        layers:     2,
+        maxiter:    30,
+        shots:      256
+      },
+      tags: ["Angle Encoding", "RealAmplitudes", "COBYLA", "2 Layers", "30 Iterations"],
+      activeClass: "active-finance"
+    },
+    hr: {
+      datasetKey: "hr",
+      objective: "Predict attrition_flag for proactive retention planning — surfacing at-risk employees before voluntary departure.",
+      pipeline: {
+        framework:  "qiskit",
+        encoding:   "basis",
+        ansatz:     "ry",
+        optimizer:  "spsa",
+        layers:     3,
+        maxiter:    40,
+        shots:      128
+      },
+      tags: ["Basis Encoding", "RY Layer", "SPSA", "3 Layers", "40 Iterations"],
+      activeClass: "active-hr"
+    },
+    supply_chain: {
+      datasetKey: "supply_chain",
+      objective: "Predict disruption_flag for supplier risk prioritisation — optimising sourcing decisions and reducing delay exposure.",
+      pipeline: {
+        framework:  "pennylane",
+        encoding:   "angle",
+        ansatz:     "realamplitudes",
+        optimizer:  "cobyla",
+        layers:     2,
+        maxiter:    25,
+        shots:      128
+      },
+      tags: ["Angle Encoding", "RealAmplitudes", "COBYLA (PL)", "2 Layers", "25 Iterations"],
+      activeClass: "active-supply"
+    }
+  };
+
   function clearCharts() {
     if (accuracyChart) {
       accuracyChart.destroy();
@@ -776,9 +826,52 @@ print("Template ready. Add your optimizer/training loop here.")
       }
     }
 
-    on("btn-finance", () => loadDataset("finance"));
-    on("btn-supply-chain", () => loadDataset("supply_chain"));
-    on("btn-hr", () => loadDataset("hr"));
+    // ── Use-Case card click handler ──────────────────────────────────────────
+    function applyUseCase(key) {
+      const uc = USE_CASES[key];
+      if (!uc) return;
+
+      // 1. Apply recommended pipeline config to controls
+      const pl = uc.pipeline;
+      if (selectFramework)  selectFramework.value  = pl.framework;
+      if (selectEncoding)   selectEncoding.value   = pl.encoding;
+      if (selectAnsatz)     selectAnsatz.value     = pl.ansatz;
+      if (selectOptimizer)  selectOptimizer.value  = pl.optimizer;
+      if (inputLayers)      inputLayers.value      = String(pl.layers);
+      if (inputMaxIter)     inputMaxIter.value     = String(pl.maxiter);
+      if (inputShots)       inputShots.value       = String(pl.shots);
+
+      // 2. Show Business Objective panel
+      const panel = document.getElementById("objective-panel");
+      const objText = document.getElementById("objective-text");
+      const objTags = document.getElementById("objective-tags");
+      if (panel && objText && objTags) {
+        objText.textContent = uc.objective;
+        objTags.innerHTML = uc.tags
+          .map(t => `<span class="obj-tag">${t}</span>`)
+          .join("");
+        // Force re-trigger animation
+        panel.classList.remove("visible");
+        void panel.offsetWidth;
+        panel.classList.add("visible");
+      }
+
+      // 3. Highlight active card, clear others
+      document.querySelectorAll(".usecase-card").forEach(c => {
+        c.classList.remove("active", "active-finance", "active-hr", "active-supply");
+      });
+      const activeCard = document.getElementById(
+        key === "finance" ? "btn-finance" : key === "hr" ? "btn-hr" : "btn-supply-chain"
+      );
+      if (activeCard) activeCard.classList.add(uc.activeClass);
+
+      // 4. Load the dataset
+      loadDataset(uc.datasetKey);
+    }
+
+    on("btn-finance",      () => applyUseCase("finance"));
+    on("btn-hr",           () => applyUseCase("hr"));
+    on("btn-supply-chain", () => applyUseCase("supply_chain"));
     on("btn-refresh-backends", () => refreshBackends());
 
     on("btn-upload", async () => {
