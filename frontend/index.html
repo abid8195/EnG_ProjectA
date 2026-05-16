@@ -128,15 +128,15 @@
                 title="Circuit depth — number of variational layers (1–5)" />
             </label>
             <label class="field">Iterations (training)
-              <input id="inp-maxiter" type="number" min="1" max="200" value="30"
-                title="How many optimiser steps to run — more = better accuracy, slower" />
+              <input id="inp-maxiter" type="number" min="1" max="200" value="50"
+                title="Optimiser steps — 50 for first run, 80–120 for best accuracy" />
             </label>
             <label class="field">Shots
-              <input id="inp-shots" type="number" min="32" max="4096" step="32" value="128"
-                title="Quantum circuit measurement samples per evaluation" />
+              <input id="inp-shots" type="number" min="32" max="4096" step="32" value="512"
+                title="Quantum samples per evaluation — 512 balances speed and accuracy" />
             </label>
             <label class="field">Test Split %
-              <input id="inp-test-size" type="number" min="10" max="40" step="5" value="25"
+              <input id="inp-test-size" type="number" min="10" max="40" step="5" value="20"
                 title="Percentage of rows held out for accuracy evaluation" />
             </label>
           </div>

@@ -1,0 +1,482 @@
+===============================================================================
+  QML DataFlow Studio — Complete Run Guide & Workflow
+  Variational Quantum Classifier (VQC) on Qiskit Aer Simulator
+===============================================================================
+
+This file covers everything you need to go from zero to working predictions:
+  1. How to start the application
+  2. Step-by-step workflow
+  3. How to create training CSV files
+  4. How to create prediction CSV files
+  5. How to experiment and tune settings
+  6. Accuracy thresholds — when you are ready to predict
+  7. Quick-reference settings table
+
+-------------------------------------------------------------------------------
+SECTION 1 — STARTING THE APPLICATION
+-------------------------------------------------------------------------------
+
+Requirements:
+  - Python 3.11 or 3.12  (NOT 3.13 — Qiskit is not stable on 3.13 yet)
+  - At least 4 GB of free RAM
+  - Windows, macOS, or Linux
+
+Step 1 — Create and activate a virtual environment
+  Windows:
+    python -m venv .venv
+    .venv\Scripts\activate
+
+  macOS / Linux:
+    python3 -m venv .venv
+    source .venv/bin/activate
+
+Step 2 — Install all dependencies
+    pip install -r requirements.txt
+
+  This installs: Flask, Qiskit, Qiskit Aer, qiskit-machine-learning,
+  qiskit-algorithms, scikit-learn, pandas, joblib, waitress, openpyxl.
+  First install may take 3–5 minutes.
+
+Step 3 — Start the server
+    python app.py
+
+  You will see:
+    QML DataFlow Studio starting on http://localhost:5000
+
+Step 4 — Open in browser
+    http://localhost:5000
+
+  The green dot in the top-right corner confirms the backend is online.
+  If it shows red "Backend offline", check that python app.py is still running.
+
+  DO NOT use a separate frontend server — Flask serves everything from one
+  process. Only one URL is needed: http://localhost:5000
+
+-------------------------------------------------------------------------------
+SECTION 2 — STEP-BY-STEP WORKFLOW
+-------------------------------------------------------------------------------
+
+The correct order is always:  DESIGN → TRAIN → EVALUATE → PREDICT
+
+--- STEP 1: Choose or load a dataset (Pipeline Builder tab) ---
+
+  Option A — Use a built-in domain dataset:
+    Click one of the domain buttons at the top: Finance, Supply Chain, HR
+    The canvas automatically updates with the correct feature columns
+    and the recommended settings are pre-filled in the side panel.
+
+  Option B — Upload your own CSV:
+    In the side panel, click "Upload & Map Columns"
+    Select your CSV file
+    In the column mapper dialog:
+      - Set "Target (label) column" to your binary outcome column (0 or 1)
+      - Hold Ctrl and click all feature columns you want to use
+      - Check the health line at the bottom: it shows qubit count and row count
+      - Click "Apply Mapping →"
+
+--- STEP 2: Configure the pipeline (side panel settings) ---
+
+  Use the Execution Settings panel on the right. Recommended starting point:
+
+    Encoder:            Angle (ZZFeatureMap)
+    Ansatz:             RealAmplitudes
+    Optimizer:          COBYLA
+    Layers / Reps:      1
+    Iterations:         50
+    Shots:              512
+    Test Split %:       20
+
+  The canvas circuit node updates its qubit count automatically to match
+  the number of feature columns — you do not need to change it manually.
+
+--- STEP 3: Run the pipeline ---
+
+  Click "Run Quantum Pipeline" (or press Ctrl+Enter on the canvas).
+  The amber border on the nodes indicates training is in progress.
+  Training takes 30 seconds to 5 minutes depending on settings and dataset size.
+
+  DO NOT close the browser or stop the server while training is running.
+
+--- STEP 4: Read the results (Results tab) ---
+
+  The app switches automatically to the Results tab when training completes.
+  Key numbers to look at:
+
+    Test Accuracy  — percentage of correct predictions on unseen rows
+    F1 Score       — balance of precision and recall (0 to 1)
+    Baseline Acc.  — what a simple logistic regression scores on the same data
+    Training Loss  — should go downward; flat curve means the model did not learn
+
+  Compare your Test Accuracy to the Baseline Accuracy.
+  If they are the same or the quantum model is lower, the model needs more tuning.
+
+--- STEP 5: Tune if needed (see Section 5) ---
+
+--- STEP 6: Predict on new data (Predict tab) ---
+
+  Once accuracy is acceptable:
+    Click the Predict tab
+    Upload a CSV with the same feature columns but NO label column
+    Click "Run Predictions"
+    The output table shows "HIGH RISK" / "low risk" (or 1 / 0) for every row
+    Click "Export CSV" to download the results
+
+-------------------------------------------------------------------------------
+SECTION 3 — HOW TO CREATE A TRAINING CSV FILE
+-------------------------------------------------------------------------------
+
+A training file is a labelled dataset used to teach the quantum model
+what patterns correspond to high-risk vs low-risk outcomes.
+
+--- File format rules ---
+
+  Format:         UTF-8 comma-separated values (.csv) with a header row
+  Rows:           80 to 500 rows  (120 to 200 is the sweet spot for VQC)
+  Feature columns: 3 to 8 numeric columns only
+  Label column:   1 binary integer column — values must be exactly 0 and 1
+  Missing values: None — remove all rows with blank or NaN cells before upload
+  Class balance:  Aim for 40%/60% to 60%/40% split between 0s and 1s
+
+--- Feature column rules ---
+
+  - All feature columns must be numbers (integers or decimals)
+  - Do NOT include text, dates, IDs, or category names as features
+  - Do NOT include the label column again in the features
+  - Do NOT include columns that are perfect predictors (e.g., a running total
+    that directly encodes the outcome) — this causes overfitting
+  - Avoid highly correlated pairs (e.g., total_revenue and daily_revenue together)
+  - Normalisation is NOT required — the application applies StandardScaler automatically
+
+--- Label column rules ---
+
+  - One column only
+  - Values: 0 means "safe / no event / negative class"
+            1 means "at risk / event / positive class"
+  - No other values (not -1, not 2, not "yes/no", not NaN)
+  - Name it clearly: risk_flag, attrition_flag, disruption_flag, churn_flag, etc.
+
+--- Row count guidance ---
+
+  Under 60 rows:    Too few — the model cannot generalise. Add more data.
+  60 to 80 rows:    Marginal — may work but results will be unstable.
+  80 to 150 rows:   Good — reliable for most VQC configurations.
+  150 to 300 rows:  Very good — stable results across most settings.
+  Over 500 rows:    Slower training (each row is a quantum circuit evaluation).
+                    Consider taking a balanced 300-row sample.
+
+--- Column count guidance ---
+
+  3 to 4 columns:  Fast training, fewer qubits, easier to converge.
+  5 to 6 columns:  Balanced — works well with most default settings.
+  7 to 8 columns:  Slower, needs more iterations to converge.
+  Over 8 columns:  Very slow on a classical computer — reduce features first.
+
+--- Finance domain example (6 columns, 120 rows) ---
+
+  market_volatility, debt_ratio, liquidity_ratio, revenue_growth, credit_score, risk_flag
+  0.82, 0.71, 0.34, -0.08, 510, 1
+  0.21, 0.32, 0.78,  0.14, 720, 0
+  ...
+
+--- Supply chain domain example ---
+
+  supplier_delay_days, inventory_turnover, defect_rate, shipping_cost_index, demand_variance, disruption_flag
+  14, 3.1, 0.082, 1.31, 0.64, 1
+  2,  6.8, 0.011, 0.92, 0.21, 0
+  ...
+
+--- HR attrition domain example ---
+
+  overtime_hours, engagement_score, years_at_company, training_hours, performance_score, attrition_flag
+  18, 44, 1, 6, 52, 1
+  4,  81, 9, 22, 88, 0
+  ...
+
+-------------------------------------------------------------------------------
+SECTION 4 — HOW TO CREATE A PREDICTION CSV FILE
+-------------------------------------------------------------------------------
+
+A prediction file contains new, unseen rows that you want the trained model
+to classify. It has the SAME feature columns as the training file but does
+NOT have the label column.
+
+--- Rules ---
+
+  Columns:  Exactly the same feature column names as the training CSV
+            (same names, same order, same data types)
+  Label:    Do NOT include the label column (risk_flag, attrition_flag, etc.)
+  Rows:     1 to 500 rows
+  Values:   Same numeric format as training data
+
+--- Finance prediction example ---
+
+  market_volatility, debt_ratio, liquidity_ratio, revenue_growth, credit_score
+  0.74, 0.68, 0.38, -0.04, 530
+  0.18, 0.29, 0.82,  0.19, 735
+  ...
+  (No risk_flag column)
+
+--- What the output means ---
+
+  prediction = 1 → HIGH RISK  (the model places this row in the positive class)
+  prediction = 0 → low risk   (the model places this row in the negative class)
+
+  probability_class1 (if shown) → confidence score between 0 and 1.
+    Values near 1.0 = very confident HIGH RISK
+    Values near 0.0 = very confident low risk
+    Values near 0.5 = uncertain — review these rows manually
+
+  Use the predictions as a ranked list for prioritised human review,
+  NOT as automatic decision-making for consequential outcomes.
+
+--- Common prediction errors and fixes ---
+
+  "Missing columns in file: ['risk_flag']"
+    → You included the label column. Remove it from the prediction CSV.
+
+  "Missing columns in file: ['market_volatility']"
+    → Column name mismatch. Check spelling and capitalisation matches training CSV.
+
+  "Model not found"
+    → You need to train first on the Pipeline Builder tab before predicting.
+
+-------------------------------------------------------------------------------
+SECTION 5 — HOW TO EXPERIMENT TO GET BETTER ACCURACY
+-------------------------------------------------------------------------------
+
+Start with the recommended defaults. Run once, note the Test Accuracy and F1.
+Then apply these changes one at a time — do not change everything at once.
+
+--- If accuracy is equal to or below the baseline ---
+
+  The model is not learning. Most likely causes:
+
+  1. Too few iterations
+     → Increase Iterations from 30 to 80 or 100
+     → This is the single most effective fix in most cases
+
+  2. Circuit too shallow
+     → Increase Reps from 1 to 2
+     → More circuit depth = more expressive hypothesis space
+
+  3. Wrong encoder for your data
+     → Switch from Angle (ZZFeatureMap) to Basis (PauliFeatureMap)
+     → PauliFeatureMap captures different feature interaction patterns
+
+--- If accuracy improves a little but plateaus ---
+
+  1. Try SPSA optimizer instead of COBYLA
+     → SPSA uses noisy gradient estimation, which escapes flat regions better
+
+  2. Try EfficientSU2 ansatz instead of RealAmplitudes
+     → More entanglement layers, different rotation structure
+
+  3. Increase shots to 1024
+     → More shots = less statistical noise in loss estimation
+     → Especially useful if loss curve is very jagged
+
+--- If training loss is flat from iteration 1 ---
+
+  This means the optimizer is stuck at a flat landscape (barren plateau):
+  1. Increase Reps to 2 or 3
+  2. Switch to EfficientSU2 ansatz
+  3. Try ADAM optimizer (stepsize-based, escapes flat areas better)
+  4. Reduce the number of features to 3 or 4 (fewer qubits = simpler landscape)
+
+--- If training is taking more than 5 minutes ---
+
+  Reduce these settings to speed it up:
+  - Reps:      reduce to 1
+  - Shots:     reduce to 128 or 256
+  - Features:  reduce to 4 or 5 columns (fewer qubits)
+  - Optimizer: use COBYLA (fewest function evaluations for small parameter counts)
+
+--- Use the Experiments tab to compare runs ---
+
+  Every completed run is recorded in the Experiments tab.
+  Run the same dataset with different settings and compare the bar charts.
+  This is the fastest way to find which encoder/ansatz/optimizer combination
+  works best for your specific dataset.
+
+--- Suggested experimentation sequence ---
+
+  Run 1:  Angle encoder, RealAmplitudes, COBYLA, Reps=1, Iter=50, Shots=512
+  Run 2:  Same but Iter=100  (does more iterations improve accuracy?)
+  Run 3:  Angle encoder, RealAmplitudes, COBYLA, Reps=2, Iter=80  (deeper circuit)
+  Run 4:  Basis encoder, EfficientSU2, SPSA, Reps=2, Iter=80     (different combo)
+  Run 5:  Best combination from above, Shots=1024                 (reduce noise)
+
+  Compare all 5 runs in the Experiments tab. Use the highest-accuracy run
+  for final predictions.
+
+-------------------------------------------------------------------------------
+SECTION 6 — ACCURACY THRESHOLDS: WHEN TO GO FOR PREDICTION
+-------------------------------------------------------------------------------
+
+These thresholds apply to BINARY CLASSIFICATION tasks (0/1 output).
+Always compare the quantum model against the classical baseline shown on
+the Results tab — not against an absolute number.
+
+THRESHOLD GUIDE:
+
+  Test Accuracy < Baseline         NOT ready
+  ─────────────────────────────────────────────────────────────────────────────
+  The quantum model performs worse than a simple logistic regression.
+  Do not predict. Tune first (more iterations, different encoder/ansatz).
+
+  Test Accuracy = Baseline ± 2%    BORDERLINE — requires judgement
+  ─────────────────────────────────────────────────────────────────────────────
+  The model matches the classical baseline but adds no quantum advantage.
+  Check F1 score: if F1 > 0.65, predictions may still be useful for screening.
+  Tune further before using for consequential decisions.
+
+  Test Accuracy > Baseline by 3–8% AND F1 > 0.65    READY FOR SCREENING USE
+  ─────────────────────────────────────────────────────────────────────────────
+  The quantum model meaningfully outperforms the classical baseline.
+  Predictions are reliable enough for:
+    - Generating a priority list for human review
+    - Flagging high-risk cases for analyst attention
+    - Internal analytics and reporting
+
+  Test Accuracy > Baseline by 8%+ AND F1 > 0.72    STRONG — HIGH CONFIDENCE
+  ─────────────────────────────────────────────────────────────────────────────
+  Strong model. Predictions carry high confidence.
+  Suitable for:
+    - Automated triage dashboards
+    - Risk scoring pipelines fed into downstream systems
+    - Comparison against more expensive external ML models
+
+ABSOLUTE MINIMUM THRESHOLDS (regardless of baseline):
+
+  Test Accuracy:   65% minimum before making any predictions
+  F1 Score:        0.60 minimum for screening use
+  F1 Score:        0.70+ for deployment in a business workflow
+
+WHAT COUNTS AS "BASELINE":
+
+  The baseline shown is a Logistic Regression trained on the same data split.
+  For a perfectly balanced dataset (50% class 0, 50% class 1) the majority-class
+  baseline is 50%. For an imbalanced dataset (e.g., 70% class 0) the baseline
+  can be 70% — in which case you need to check F1 score carefully, as
+  predicting everything as class 0 will give 70% accuracy with F1 = 0.
+
+NOTE ON CONFIDENCE SCORES:
+
+  If the prediction output includes "probability_class1", use it:
+  - Rows with score > 0.75: high confidence, act on these first
+  - Rows with score 0.50 to 0.75: uncertain, route to manual review
+  - Rows with score < 0.50: model predicts low risk
+
+-------------------------------------------------------------------------------
+SECTION 7 — QUICK REFERENCE SETTINGS TABLE
+-------------------------------------------------------------------------------
+
+Setting         | Default | Min | Max | Notes
+─────────────────┼─────────┼─────┼─────┼──────────────────────────────────────
+Encoder         | Angle   | —   | —   | ZZFeatureMap (angle) is best for
+                |         |     |     | structured tabular data. Basis/IQP
+                |         |     |     | for different feature patterns.
+─────────────────┼─────────┼─────┼─────┼──────────────────────────────────────
+Ansatz          | Real-   | —   | —   | RealAmplitudes: fastest, most stable.
+                | Amplitu |     |     | EfficientSU2: more expressive, slower.
+                | des     |     |     | TwoLocal: highly flexible, slowest.
+─────────────────┼─────────┼─────┼─────┼──────────────────────────────────────
+Optimizer       | COBYLA  | —   | —   | COBYLA: best for < 50 parameters.
+                |         |     |     | SPSA: noisy landscapes, large circuits.
+                |         |     |     | ADAM: gradient-based, medium circuits.
+─────────────────┼─────────┼─────┼─────┼──────────────────────────────────────
+Layers / Reps   | 1       | 1   | 5   | Start at 1. Increase to 2 if model
+                |         |     |     | is not converging. Reps > 3 is very
+                |         |     |     | slow on a classical computer.
+─────────────────┼─────────┼─────┼─────┼──────────────────────────────────────
+Iterations      | 50      | 1   | 200 | Most important setting.
+                |         |     |     | 30 = quick test run (check it works)
+                |         |     |     | 50 = standard first run
+                |         |     |     | 80–120 = best accuracy for most data
+                |         |     |     | 150–200 = maximum tuning, slowest
+─────────────────┼─────────┼─────┼─────┼──────────────────────────────────────
+Shots           | 512     | 32  |4096 | Quantum samples per evaluation.
+                |         |     |     | 128 = fast, noisier loss estimates
+                |         |     |     | 512 = good balance (recommended)
+                |         |     |     | 1024 = best accuracy, 2× slower
+                |         |     |     | 2048+ = very slow, marginal benefit
+─────────────────┼─────────┼─────┼─────┼──────────────────────────────────────
+Test Split %    | 20      | 10  | 40  | Percentage of rows held out for
+                |         |     |     | accuracy evaluation.
+                |         |     |     | 20% = recommended for 80-200 rows
+                |         |     |     | 25–30% = for 200+ rows
+─────────────────┼─────────┼─────┼─────┼──────────────────────────────────────
+
+ENCODER SELECTION GUIDE:
+
+  ZZFeatureMap (angle):
+    Best for: structured tabular data, correlated financial/operational features
+    Captures: second-order feature interactions (pairs of features)
+    Use when: you have 3–6 numeric features with real-world correlations
+
+  PauliFeatureMap (basis):
+    Best for: sparse or independent features, sensor readings
+    Captures: single-feature and pair interactions via Pauli operators
+    Use when: ZZFeatureMap gives flat loss after many iterations
+
+  PauliFeatureMap (iqp):
+    Best for: higher-dimensional feature spaces, feature independence
+    Captures: single, pair, and triple feature interactions
+    Use when: basis encoding is too simple for your dataset
+
+OPTIMIZER SELECTION GUIDE:
+
+  COBYLA (Constrained Optimization BY Linear Approximations):
+    Best for: 10–50 parameters (Reps=1 with 4–5 qubits = ~16–20 parameters)
+    Pro: stable, fewer function evaluations, predictable convergence
+    Con: can get stuck in local minima on complex landscapes
+
+  SPSA (Simultaneous Perturbation Stochastic Approximation):
+    Best for: 50+ parameters, or when COBYLA gets stuck
+    Pro: escapes noisy landscapes, scales to large circuits
+    Con: more iterations needed, loss curve may be irregular
+
+  ADAM:
+    Best for: medium circuits, when you need gradient-like convergence
+    Pro: adaptive step size, often converges faster than COBYLA
+    Con: requires more memory, can oscillate near convergence
+
+-------------------------------------------------------------------------------
+SECTION 8 — COMMON ERRORS AND FIXES
+-------------------------------------------------------------------------------
+
+Error: "Circuit num_qubits (X) must equal the number of selected feature columns (Y)"
+  Fix: Click a domain dataset button or re-upload your CSV. The circuit node
+       automatically updates its qubit count to match the feature count.
+
+Error: "No dataset loaded"
+  Fix: Click a domain dataset button or upload a CSV and apply the column mapping.
+
+Error: "No label column specified"
+  Fix: In the CSV mapper dialog, select the target column.
+
+Error: "Backend offline"
+  Fix: Check that "python app.py" is still running in your terminal.
+       Restart it if needed.
+
+Error: "Could not parse file"
+  Fix: Ensure the CSV is UTF-8 encoded with no special characters in column names.
+       Open in Notepad and Save As UTF-8 if needed.
+
+Error: "Model not found. Run training first."
+  Fix: Complete a training run on the Pipeline Builder tab before predicting.
+
+Error: Training completes but accuracy is exactly equal to baseline every time
+  Fix: Increase iterations to 80+. Check that feature columns are all numeric.
+       Try the Basis encoder instead of Angle.
+
+Error: Loss curve is completely flat (does not decrease at all)
+  Fix: Increase Reps to 2. Try SPSA optimizer. Reduce feature count to 4.
+
+Training takes longer than 10 minutes:
+  Fix: Reduce Reps to 1, Shots to 256, use COBYLA, reduce features to 4–5.
+
+-------------------------------------------------------------------------------
+  QML DataFlow Studio — Built with Qiskit Aer, Flask, and Vanilla JavaScript
+  Simulated quantum execution — no hardware credentials required
+===============================================================================
