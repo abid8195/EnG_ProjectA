@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QML Pipeline (Sprint-1)</title>
+
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --ink:#111;
+      --card:#fff;
+      --line:#e5e7eb;
+      --muted:#64748b;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #f8fafc;
+      color: var(--ink);
+    }
+
+    .wrap {
+      max-width: 1200px;
+      margin: 18px auto;
+      padding: 0 12px;
+    }
+
+    .panel { margin-top: 8px; }
+    .toolbar .btn { margin-right: 6px; margin-bottom: 6px; }
+
+    .btn {
+      padding: 6px 10px;
+      border: 1px solid #cbd5e1;
+      background:#fff;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .btn.primary {
+      background:#111;
+      color:#fff;
+      border-color:#111;
+    }
+
+    .note { color:#64748b; }
+    .muted { color:#64748b; }
+
+    .studio {
+      display:flex;
+      gap:14px;
+      align-items:flex-start;
+    }
+
+    #canvas {
+      width: calc(100% - 360px);
+      height: 72vh;
+      min-height: 520px;
+      background:#fafafa;
+      border:1px solid #ddd;
+      border-radius:10px;
+      position: relative;
+      overflow: auto;
+    }
+
+    #sidepanel{
+      width:340px;
+      min-width:340px;
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:10px;
+      color:var(--ink);
+      height:72vh;
+      overflow:auto;
+    }
+
+    .node {
+      position:absolute;
+      min-width: 160px;
+      max-width: 260px;
+      background:#fff;
+      border:1px solid #d1d5db;
+      border-radius:8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.06);
+      padding:8px;
+      cursor:grab;
+      user-select:none;
+      z-index: 2;
+    }
+
+    .node:active { cursor:grabbing; }
+    .node .node-title { font-weight:600; margin-bottom:6px; }
+    .node .node-param { display:block; margin:6px 0; }
+    .node .node-param input {
+      width:100%;
+      padding:4px 6px;
+      border:1px solid #e5e7eb;
+      border-radius:6px;
+    }
+
+    .node.selected { outline: 2px solid #3b82f6; }
+
+    #wires {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .node .ports {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 6px 0;
+      padding: 4px 0;
+    }
+
+    .node .port {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: middle;
+      box-shadow: 0 0 0 2px #fff, 0 0 0 3px #666;
+      cursor: crosshair;
+      position: relative;
+      z-index: 3;
+    }
+
+    .node .port:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 0 2px #fff, 0 0 0 3px #333;
+    }
+
+    .node .port.in  { background: #10b981; }
+    .node .port.out { background: #3b82f6; }
+
+    @keyframes dash {
+      from { stroke-dashoffset: 15; }
+      to { stroke-dashoffset: 0; }
+    }
+
+    .dashboard-section {
+      margin-top: 18px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .metric-card strong {
+      font-size: 14px;
+      color: #334155;
+    }
+
+    .metric-card span {
+      font-size: 20px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .chart-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #fff;
+      padding: 12px;
+    }
+
+    .chart-card h3 {
+      margin-top: 0;
+      font-size: 16px;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 320px;
+    }
+
+    #result {
+      background: #0f172a;
+      color: #cbd5e1;
+      padding: 12px;
+      border-radius: 8px;
+      overflow: auto;
+      max-height: 320px;
+    }
+
+    #codePreview {
+      background:#111;
+      color:#cfc;
+      padding:8px;
+      overflow:auto;
+      height:260px;
+      border-radius: 8px;
+    }
+
+    @media (max-width: 980px) {
+      .studio {
+        flex-direction: column;
+      }
+
+      #canvas {
+        width: 100%;
+      }
+
+      #sidepanel {
+        width: 100%;
+        min-width: 0;
+        height: auto;
+      }
+
+      .charts-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metrics-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>QML DataFlow Studio</h1>
+
+    <div class="panel">
+      <div class="toolbar">
+        <button type="button" class="btn" id="add-dataset">Add Dataset</button>
+        <button type="button" class="btn" id="add-encoder">Add Encoder</button>
+        <button type="button" class="btn" id="add-circuit">Add Circuit</button>
+        <button type="button" class="btn" id="add-optimizer">Add Optimizer</button>
+        <button type="button" class="btn" id="add-output">Add Output</button>
+        <button type="button" class="btn" id="btn-export-model">Export Model JSON</button>
+        <button type="button" class="btn" id="btn-load-model">Load Model JSON</button>
+        <button type="button" class="btn" id="btn-generate-from-model">Generate From Model</button>
+      </div>
+
+      <div class="studio">
+        <div id="canvas" aria-label="Model canvas">
+          <svg id="wires"></svg>
+        </div>
+
+        <div id="sidepanel" aria-label="Node editor">
+          <h3>Node editor</h3>
+          <div id="selected-info" class="muted">No node selected. Click a node or add one.</div>
+          <div id="node-params" style="margin-top:8px;"></div>
+
+          <div style="margin-top:10px">
+            <button type="button" class="btn" id="btn-save-node">Save Node</button>
+            <button type="button" class="btn" id="btn-delete-node">Delete Node</button>
+          </div>
+
+          <hr style="margin:12px 0" />
+          <h4>Persistence</h4>
+          <input type="file" id="file-load-model" accept=".json" style="display:none" />
+          <button type="button" class="btn" id="btn-save-model">Download Model</button>
+          <button type="button" class="btn" id="btn-load-model-ui">Upload Model</button>
+
+          <hr style="margin:12px 0" />
+          <h3>Block Info</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+            <button type="button" class="btn" data-info="dataset">Dataset</button>
+            <button type="button" class="btn" data-info="encoder">Encoder</button>
+            <button type="button" class="btn" data-info="circuit">Circuit</button>
+            <button type="button" class="btn" data-info="optimizer">Optimizer</button>
+            <button type="button" class="btn" data-info="output">Training & Output</button>
+          </div>
+          <div id="info-text" class="note"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:12px">
+        <h3>Domain Dataset Selection</h3>
+        <div style="margin-bottom: 10px;">
+          <button type="button" class="btn" id="btn-finance">Finance Risk Dataset</button>
+          <button type="button" class="btn" id="btn-supply-chain">Supply Chain Dataset</button>
+          <button type="button" class="btn" id="btn-hr">HR Attrition Dataset</button>
+        </div>
+
+        <h3>Execution Setup</h3>
+        <div class="toolbar" style="margin-bottom:10px;">
+          <label class="note">Framework export
+            <select id="select-framework">
+              <option value="qiskit">Qiskit</option>
+              <option value="pennylane">PennyLane</option>
+            </select>
+          </label>
+
+          <label class="note">Encoding
+            <select id="select-encoding">
+              <option value="angle">Angle Encoding</option>
+              <option value="basis">Basis Encoding</option>
+            </select>
+          </label>
+
+          <label class="note">Ansatz
+            <select id="select-ansatz">
+              <option value="ry">RY Layer</option>
+              <option value="realamplitudes">RealAmplitudes</option>
+            </select>
+          </label>
+
+          <label class="note">Optimizer
+            <select id="select-optimizer">
+              <option value="cobyla">COBYLA</option>
+              <option value="spsa">SPSA</option>
+            </select>
+          </label>
+
+          <label class="note">Layers
+            <input id="input-layers" type="number" min="1" max="6" step="1" value="2" style="width:60px" />
+          </label>
+
+          <label class="note">Iterations
+            <input id="input-maxiter" type="number" min="1" max="80" step="1" value="20" style="width:72px" />
+          </label>
+
+          <label class="note">Provider
+            <select id="select-provider">
+              <option value="aer">Qiskit Aer</option>
+            </select>
+          </label>
+
+          <label class="note">Backend
+            <input id="input-backend" type="text" value="aer_simulator" style="width:170px" />
+          </label>
+
+          <label class="note">Shots
+            <input id="input-shots" type="number" min="32" max="4096" step="32" value="128" style="width:82px" />
+          </label>
+        </div>
+
+        <div class="toolbar" style="margin-bottom:10px;">
+          <input type="file" id="csvFile" accept=".csv" />
+          <button type="button" class="btn" id="btn-upload">Upload Custom CSV</button>
+          <button type="button" class="btn" id="btn-refresh-backends">Refresh Backends</button>
+        </div>
+
+        <div class="toolbar">
+          <button type="button" class="btn" id="btn-generate">Generate Code Template</button>
+          <button type="button" class="btn" id="btn-export">Export JSON</button>
+          <button type="button" class="btn primary" id="btn-run">Run Quantum Pipeline</button>
+        </div>
+      </div>
+
+      <div id="msg" class="note" style="margin-top:8px;"></div>
+
+      <div class="dashboard-section">
+        <h2>Live Performance Dashboard</h2>
+        <div id="training-metrics" class="metrics-grid">
+          <div class="metric-card"><strong>Train Accuracy</strong><span>--</span></div>
+          <div class="metric-card"><strong>Test Accuracy</strong><span>--</span></div>
+          <div class="metric-card"><strong>Epochs</strong><span>--</span></div>
+        </div>
+
+        <h3>Pipeline Result</h3>
+        <pre id="result" aria-live="polite"></pre>
+
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>Training Accuracy Graph</h3>
+            <div class="chart-wrap">
+              <canvas id="accuracyChart"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <h3>Training Loss Graph</h3>
+            <div class="chart-wrap">
+              <canvas id="lossChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin-top:18px;">Generated Code Template</h3>
+      <pre id="codePreview"></pre>
+      <div style="margin-top:8px">
+        <button type="button" class="btn" id="btn-download-code">Download Code (py)</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
