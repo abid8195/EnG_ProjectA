@@ -1,3 +1,13 @@
+---
+title: QML DataFlow Studio
+emoji: ⚛
+colorFrom: teal
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # QML DataFlow Studio
 
 **A SysML and model-based design inspired visual studio for building, training, and deploying Quantum Machine Learning classification pipelines — without requiring access to real quantum hardware.**
