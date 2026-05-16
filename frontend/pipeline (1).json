@@ -1,0 +1,35 @@
+{
+  "version": "0.1",
+  "pipeline": "qml-classifier",
+  "qnn": {
+    "type": "estimator"
+  },
+  "dataset": {
+    "type": "iris",
+    "path": null,
+    "label_column": "target",
+    "feature_columns": [
+      "sepal length",
+      "sepal width",
+      "petal length",
+      "petal width"
+    ],
+    "test_size": 0.2,
+    "seed": 42
+  },
+  "encoder": {
+    "type": "angle"
+  },
+  "circuit": {
+    "type": "ry",
+    "num_qubits": 4,
+    "reps": 2
+  },
+  "optimizer": {
+    "type": "cobyla",
+    "maxiter": 15
+  },
+  "outputs": {
+    "return_predictions": true
+  }
+}

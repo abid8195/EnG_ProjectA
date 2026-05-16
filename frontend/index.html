@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QML DataFlow Studio</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════ HEADER ════════════════════════════════════════ -->
+<header class="app-header">
+  <div style="display:flex;align-items:baseline;gap:8px">
+    <h1>QML DataFlow Studio</h1>
+    <span class="subtitle">SysML / Model-Based Quantum ML</span>
+  </div>
+  <div class="backend-status">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">Connecting…</span>
+  </div>
+</header>
+
+<!-- ═══════════════════════ TABS ══════════════════════════════════════════ -->
+<nav class="tabs" role="tablist">
+  <button class="tab-btn active" data-tab="pipeline"    role="tab">🔬 Pipeline Builder</button>
+  <button class="tab-btn"        data-tab="results"     role="tab">📊 Results</button>
+  <button class="tab-btn"        data-tab="experiments" role="tab">🔁 Experiments</button>
+  <button class="tab-btn"        data-tab="predict"     role="tab">🎯 Predict</button>
+  <button class="tab-btn"        data-tab="code"        role="tab">💻 Code</button>
+</nav>
+
+<!-- ═══════════════════════ TAB 1 — PIPELINE BUILDER ══════════════════════ -->
+<section id="tab-pipeline" class="tab-content active" role="tabpanel">
+<div class="page">
+
+  <!-- Domain dataset selector -->
+  <div class="card section-gap">
+    <div class="card-header">📂 Domain Datasets</div>
+    <div class="card-body">
+      <div class="btn-group" id="domain-btns">
+        <!-- populated by JS from /api/registry -->
+        <span class="text-muted">Loading datasets…</span>
+      </div>
+      <div id="objective-panel" style="margin-top:10px;font-size:13px;color:var(--text2);
+           padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);
+           border:1px solid var(--border);min-height:34px;display:none"></div>
+    </div>
+  </div>
+
+  <!-- Main pipeline area -->
+  <div class="pipeline-layout section-gap">
+
+    <!-- Canvas -->
+    <div id="canvas-wrap">
+      <div class="canvas-toolbar">
+        <button class="btn btn-sm" id="btn-add-dataset">+ Dataset</button>
+        <button class="btn btn-sm" id="btn-add-encoder">+ Encoder</button>
+        <button class="btn btn-sm" id="btn-add-circuit">+ Circuit</button>
+        <button class="btn btn-sm" id="btn-add-optimizer">+ Optimizer</button>
+        <button class="btn btn-sm" id="btn-add-output">+ Output</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-sm" id="btn-demo-pipeline">Demo Pipeline</button>
+        <button class="btn btn-sm" id="btn-export-model">Export Model JSON</button>
+        <button class="btn btn-sm" id="btn-load-model">Load Model JSON</button>
+        <input type="file" id="file-load-model" accept=".json" style="display:none" />
+      </div>
+      <div id="canvas" aria-label="Pipeline canvas">
+        <svg id="wires"></svg>
+      </div>
+    </div>
+
+    <!-- Side panel -->
+    <aside id="side-panel">
+
+      <!-- Flow status -->
+      <div id="flow-status" class="flow-status pending">Flow not validated</div>
+
+      <!-- Node editor -->
+      <div class="card">
+        <div class="card-header">🧩 Node Editor</div>
+        <div class="card-body" style="padding:10px 12px">
+          <div id="selected-info" class="text-muted text-sm">Click a node to edit it.</div>
+          <div id="node-params" style="margin-top:8px"></div>
+          <div class="btn-group" style="margin-top:10px">
+            <button class="btn btn-sm" id="btn-save-node">Save Node</button>
+            <button class="btn btn-sm btn-danger" id="btn-delete-node">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Execution controls -->
+      <div class="card">
+        <div class="card-header">⚙️ Execution Settings</div>
+        <div class="card-body" style="padding:10px 12px">
+          <div class="exec-grid">
+            <label class="field">Encoder
+              <select id="sel-encoding">
+                <option value="angle">Angle (ZZFeatureMap)</option>
+                <option value="basis">Basis (PauliFeatureMap)</option>
+                <option value="iqp">IQP Encoding</option>
+              </select>
+            </label>
+            <label class="field">Ansatz
+              <select id="sel-ansatz">
+                <option value="realamplitudes">RealAmplitudes</option>
+                <option value="efficientsu2">EfficientSU2</option>
+                <option value="twolocal">TwoLocal</option>
+                <option value="ry">RY Layers</option>
+              </select>
+            </label>
+            <label class="field">Optimizer
+              <select id="sel-optimizer">
+                <option value="cobyla">COBYLA</option>
+                <option value="spsa">SPSA</option>
+                <option value="adam">ADAM</option>
+                <option value="slsqp">SLSQP</option>
+              </select>
+            </label>
+            <label class="field">Framework
+              <select id="sel-framework">
+                <option value="qiskit">Qiskit</option>
+                <option value="pennylane">PennyLane</option>
+              </select>
+            </label>
+            <label class="field">Layers / Reps
+              <input id="inp-reps" type="number" min="1" max="5" value="2"
+                title="Circuit depth — number of variational layers (1–5)" />
+            </label>
+            <label class="field">Iterations (training)
+              <input id="inp-maxiter" type="number" min="1" max="200" value="30"
+                title="How many optimiser steps to run — more = better accuracy, slower" />
+            </label>
+            <label class="field">Shots
+              <input id="inp-shots" type="number" min="32" max="4096" step="32" value="128"
+                title="Quantum circuit measurement samples per evaluation" />
+            </label>
+            <label class="field">Test Split %
+              <input id="inp-test-size" type="number" min="10" max="40" step="5" value="25"
+                title="Percentage of rows held out for accuracy evaluation" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom CSV upload -->
+      <div class="card">
+        <div class="card-header">📤 Upload Dataset</div>
+        <div class="card-body" style="padding:10px 12px">
+          <div class="btn-group">
+            <input type="file" id="csv-file" accept=".csv,.xlsx,.xls" style="font-size:12px;flex:1;min-width:0" />
+          </div>
+          <button class="btn btn-sm" id="btn-upload" style="margin-top:6px;width:100%">Upload &amp; Map Columns</button>
+        </div>
+      </div>
+
+      <!-- Run controls -->
+      <div class="card">
+        <div class="card-header">▶ Run Pipeline</div>
+        <div class="card-body" style="padding:10px 12px">
+          <div class="btn-group">
+            <button class="btn btn-primary" id="btn-run" style="flex:1">Run Quantum Pipeline</button>
+            <button class="btn btn-sm btn-danger" id="btn-cancel">Cancel</button>
+          </div>
+          <div id="run-bar" style="margin-top:8px;display:none"></div>
+        </div>
+      </div>
+
+    </aside>
+  </div><!-- .pipeline-layout -->
+
+</div><!-- .page -->
+</section>
+
+<!-- ═══════════════════════ TAB 2 — RESULTS ═══════════════════════════════ -->
+<section id="tab-results" class="tab-content" role="tabpanel">
+<div class="page">
+
+  <div id="no-results-msg" style="padding:50px;text-align:center;color:var(--muted);font-size:15px">
+    Run a pipeline on the <strong>Pipeline Builder</strong> tab to see results here.
+  </div>
+
+  <div id="results-content" style="display:none">
+
+    <!-- Quantum metrics -->
+    <div class="card section-gap">
+      <div class="card-header">⚛ Quantum Model Metrics</div>
+      <div class="card-body">
+        <div class="metrics-grid" id="metrics-grid">
+          <div class="metric-card highlight">
+            <div class="m-label">
+              <span class="tip" data-tip="Proportion of correct predictions on the held-out test set.">Test Accuracy ⓘ</span>
+            </div>
+            <div class="m-value" id="m-acc">--</div>
+          </div>
+          <div class="metric-card">
+            <div class="m-label">
+              <span class="tip" data-tip="Accuracy on the training set. High train / low test = overfitting.">Train Accuracy ⓘ</span>
+            </div>
+            <div class="m-value" id="m-train-acc">--</div>
+          </div>
+          <div class="metric-card">
+            <div class="m-label">
+              <span class="tip" data-tip="Of all predicted positives, what fraction were actually positive.">Precision ⓘ</span>
+            </div>
+            <div class="m-value" id="m-prec">--</div>
+          </div>
+          <div class="metric-card">
+            <div class="m-label">
+              <span class="tip" data-tip="Of all actual positives, what fraction did the model find.">Recall ⓘ</span>
+            </div>
+            <div class="m-value" id="m-recall">--</div>
+          </div>
+          <div class="metric-card">
+            <div class="m-label">
+              <span class="tip" data-tip="Harmonic mean of Precision and Recall. Balances both metrics.">F1 Score ⓘ</span>
+            </div>
+            <div class="m-value" id="m-f1">--</div>
+          </div>
+          <div class="metric-card">
+            <div class="m-label">
+              <span class="tip" data-tip="Area Under the ROC Curve. 1.0 = perfect, 0.5 = random classifier.">ROC-AUC ⓘ</span>
+            </div>
+            <div class="m-value" id="m-auc">--</div>
+          </div>
+          <div class="metric-card">
+            <div class="m-label">Training Epochs</div>
+            <div class="m-value" id="m-epochs">--</div>
+          </div>
+          <div class="metric-card">
+            <div class="m-label">Run Time (s)</div>
+            <div class="m-value" id="m-time">--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid section-gap">
+      <div class="chart-card">
+        <h4>Training Accuracy Curve</h4>
+        <div class="chart-wrap"><canvas id="chart-accuracy"></canvas></div>
+        <p class="text-muted" style="margin-top:6px;font-size:11px">
+          Training progression toward final accuracy. VQC does not emit per-epoch accuracy — this is an estimated progression.
+        </p>
+      </div>
+      <div class="chart-card">
+        <h4>Training Loss Curve</h4>
+        <div class="chart-wrap"><canvas id="chart-loss"></canvas></div>
+        <p class="text-muted" style="margin-top:6px;font-size:11px" id="loss-note"></p>
+      </div>
+    </div>
+
+    <!-- Confusion matrix + baseline -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" class="section-gap">
+
+      <div class="card">
+        <div class="card-header">🔲 Confusion Matrix (Test Set)</div>
+        <div class="card-body">
+          <p class="text-muted text-sm" style="margin-bottom:10px">Rows = actual label, Columns = predicted label</p>
+          <table class="cm-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Predicted 0</th>
+                <th>Predicted 1</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Actual 0</th>
+                <td id="cm00" class="cm-cell-tn">-- <br><span class="text-muted" style="font-size:10px">TN</span></td>
+                <td id="cm01" class="cm-cell-fp">-- <br><span class="text-muted" style="font-size:10px">FP</span></td>
+              </tr>
+              <tr>
+                <th>Actual 1</th>
+                <td id="cm10" class="cm-cell-fn">-- <br><span class="text-muted" style="font-size:10px">FN</span></td>
+                <td id="cm11" class="cm-cell-tp">-- <br><span class="text-muted" style="font-size:10px">TP</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">📐 Classical Baseline (Logistic Regression)</div>
+        <div class="card-body">
+          <p class="text-muted text-sm" style="margin-bottom:10px">
+            Quick comparison to a classical model trained on the same data.
+          </p>
+          <div class="metrics-grid" style="grid-template-columns:1fr 1fr 1fr">
+            <div class="metric-card"><div class="m-label">Test Accuracy</div><div class="m-value" id="base-acc">--</div></div>
+            <div class="metric-card"><div class="m-label">F1 Score</div><div class="m-value" id="base-f1">--</div></div>
+            <div class="metric-card"><div class="m-label">ROC-AUC</div><div class="m-value" id="base-auc">--</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Run summary -->
+    <div class="card section-gap">
+      <div class="card-header">📝 Run Summary</div>
+      <div class="card-body">
+        <div id="run-summary" class="text-muted text-sm">Run a pipeline to generate a summary.</div>
+      </div>
+    </div>
+
+  </div><!-- #results-content -->
+</div><!-- .page -->
+</section>
+
+<!-- ═══════════════════════ TAB 3 — EXPERIMENTS ═══════════════════════════ -->
+<section id="tab-experiments" class="tab-content" role="tabpanel">
+<div class="page">
+
+  <div class="card section-gap">
+    <div class="card-header">🔁 Run History &amp; Comparison</div>
+    <div class="card-body">
+      <p class="text-muted text-sm" style="margin-bottom:12px">
+        Each completed pipeline run is recorded here. Run 2+ pipelines with different settings to compare them.
+      </p>
+      <div id="run-history-list">
+        <p class="text-muted" style="padding:20px 0;text-align:center">No runs yet — complete a run on the Pipeline Builder tab.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comparison chart (shown when ≥2 runs) -->
+  <div class="card section-gap" id="comparison-card" style="display:none">
+    <div class="card-header">📊 Side-by-Side Comparison</div>
+    <div class="card-body">
+      <div class="chart-wrap" style="height:280px">
+        <canvas id="chart-comparison"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div>
+</section>
+
+<!-- ═══════════════════════ TAB 4 — PREDICT ═══════════════════════════════ -->
+<section id="tab-predict" class="tab-content" role="tabpanel">
+<div class="page">
+
+  <div class="card section-gap">
+    <div class="card-header">🎯 Predict on New Data</div>
+    <div class="card-body">
+
+      <div id="predict-no-model" class="predict-placeholder">
+        Run a pipeline first to train a model, then return here to make predictions.
+      </div>
+
+      <div id="predict-panel" style="display:none">
+        <p class="text-sm" style="margin-bottom:12px">
+          <strong>Active model:</strong> <code id="predict-model-id">—</code>
+          &nbsp;|&nbsp;
+          <strong>Features:</strong> <span id="predict-features">—</span>
+        </p>
+        <p class="text-muted text-sm" style="margin-bottom:14px">
+          Upload a CSV or XLSX with the same feature columns (no label required). The trained quantum model will predict the class for each row.
+        </p>
+
+        <div class="btn-group" style="align-items:center">
+          <input type="file" id="predict-file" accept=".csv,.xlsx,.xls" style="font-size:13px" />
+          <button class="btn btn-primary" id="btn-predict">Run Predictions</button>
+        </div>
+
+        <div id="predict-run-bar" style="margin-top:10px;display:none;font-size:12px;
+             padding:8px 12px;border-radius:var(--radius-sm);background:var(--amber-light);
+             border:1px solid var(--amber)"></div>
+
+        <div id="predict-results" class="predict-results section-gap" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <h4 style="font-size:13px;font-weight:600" id="predict-result-title">Predictions</h4>
+            <button class="btn btn-sm" id="btn-export-predictions">Export CSV</button>
+          </div>
+          <div class="preview-table-wrap" id="predict-table-wrap"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</section>
+
+<!-- ═══════════════════════ TAB 5 — CODE ══════════════════════════════════ -->
+<section id="tab-code" class="tab-content" role="tabpanel">
+<div class="page">
+
+  <div class="card section-gap">
+    <div class="card-header">💻 Generated Code Template</div>
+    <div class="card-body">
+      <div class="btn-group" style="margin-bottom:12px">
+        <button class="btn btn-sm" id="btn-gen-qiskit">Generate Qiskit</button>
+        <button class="btn btn-sm" id="btn-gen-pennylane">Generate PennyLane</button>
+        <button class="btn btn-sm" id="btn-gen-from-model">Generate From Canvas</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-sm btn-primary" id="btn-download-code">⬇ Download .py</button>
+        <button class="btn btn-sm" id="btn-export-spec">Export Pipeline JSON</button>
+      </div>
+      <pre id="code-preview"># Click "Generate Qiskit" or "Generate PennyLane" to build a starter script
+# from your current pipeline configuration.</pre>
+    </div>
+  </div>
+
+</div>
+</section>
+
+<!-- ═══════════════════════ CSV MAPPER DIALOG ════════════════════════════ -->
+<dialog id="csv-mapper">
+  <h3 style="margin-bottom:4px">Map Dataset Columns</h3>
+  <p class="text-muted text-sm" style="margin-bottom:12px">
+    Select which column is the target (label) and which are features (inputs to the model).
+  </p>
+
+  <!-- Data preview -->
+  <details style="margin-bottom:12px">
+    <summary class="text-sm" style="cursor:pointer;font-weight:600">Preview first rows ▸</summary>
+    <div id="mapper-preview-wrap" class="preview-table-wrap" style="max-height:160px;overflow:auto"></div>
+  </details>
+
+  <div class="mapper-grid">
+    <div>
+      <label class="field" style="margin-bottom:8px">Target (label) column
+        <select id="csv-label" style="padding:6px;border:1px solid var(--border2);border-radius:var(--radius-sm)"></select>
+      </label>
+      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;margin-top:8px">
+        <input type="checkbox" id="csv-numeric-only" />
+        Show numeric columns only
+      </label>
+    </div>
+    <div>
+      <label class="field">Feature columns (hold Ctrl to multi-select)
+        <select id="csv-features" multiple size="8"
+                style="padding:6px;border:1px solid var(--border2);border-radius:var(--radius-sm)"></select>
+      </label>
+    </div>
+  </div>
+
+  <div id="csv-health" class="text-muted text-sm">Select label and features to see dataset health.</div>
+
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+    <button class="btn" id="csv-cancel">Cancel</button>
+    <button class="btn btn-primary" id="csv-apply">Apply Mapping →</button>
+  </div>
+</dialog>
+
+<script src="app.js" defer></script>
+</body>
+</html>

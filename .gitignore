@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Uploads and generated files
+uploads/*
+!uploads/.gitkeep
+models/*
+!models/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Test cache
+.pytest_cache/
+.coverage
+
+# IDE
+.vscode/
+
+# Stale root-level files superseded by frontend/ and backend/ packages
+/app.js
+/index.html
+/style.css
+/runner.py
+/dataset_catalog.py
+/quantum_runner.py
+
+# Old package structure
+/qml-pipeline/
+/tools/
+/specs/
+/backend/app.py
+/backend/runner.py
+/backend/codegen.py
+/backend/test_app.py
