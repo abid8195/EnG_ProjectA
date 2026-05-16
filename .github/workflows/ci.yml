@@ -1,0 +1,102 @@
+name: CI — Validate & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check Flask app imports correctly
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          # Verify Flask app loads without error
+          from app import app
+          print('Flask app imported OK')
+          # Verify backend modules load
+          from backend.dataset_catalog import DATASET_CONFIGS
+          print(f'Dataset catalog loaded: {list(DATASET_CONFIGS.keys())}')
+          from backend.pipeline_registry import ENCODER_REGISTRY, ANSATZ_REGISTRY, OPTIMIZER_REGISTRY
+          print('Pipeline registry loaded OK')
+          # Verify datasets exist on disk
+          from pathlib import Path
+          for name, cfg in DATASET_CONFIGS.items():
+              p = Path(cfg['path'])
+              assert p.exists(), f'Dataset file missing: {p}'
+              print(f'  {name}: {p.name} — OK')
+          print('All dataset files present')
+          "
+
+      - name: Check health endpoint responds
+        run: |
+          python -c "
+          from app import app
+          client = app.test_client()
+          r = client.get('/api/health')
+          assert r.status_code == 200, f'Health check failed: {r.status_code}'
+          data = r.get_json()
+          assert data['status'] == 'ok', f'Unexpected status: {data}'
+          print('Health endpoint OK:', data)
+          "
+
+      - name: Check registry endpoint responds
+        run: |
+          python -c "
+          from app import app
+          client = app.test_client()
+          r = client.get('/api/registry')
+          assert r.status_code == 200
+          data = r.get_json()
+          assert 'datasets' in data and len(data['datasets']) > 0
+          assert 'encoders' in data
+          assert 'ansatze' in data
+          assert 'optimizers' in data
+          print('Registry endpoint OK — datasets:', list(data['datasets'].keys()))
+          "
+
+      - name: Check frontend static files are present
+        run: |
+          python -c "
+          from pathlib import Path
+          for f in ['frontend/index.html', 'frontend/app.js', 'frontend/style.css']:
+              assert Path(f).exists(), f'Missing frontend file: {f}'
+              print(f'  {f} — OK')
+          print('All frontend files present')
+          "
+
+      - name: Verify Qiskit Aer is importable
+        run: |
+          python -c "
+          from qiskit_aer import AerSimulator
+          from qiskit.circuit.library import ZZFeatureMap, RealAmplitudes
+          from qiskit_machine_learning.algorithms.classifiers import VQC
+          from qiskit_algorithms.optimizers import COBYLA
+          print('Qiskit Aer stack imported OK')
+          # Quick smoke test — build a 2-qubit circuit
+          fm = ZZFeatureMap(feature_dimension=2, reps=1)
+          ans = RealAmplitudes(num_qubits=2, reps=1)
+          print(f'Feature map: {fm.num_qubits} qubits')
+          print(f'Ansatz params: {ans.num_parameters}')
+          print('Qiskit circuit smoke test passed')
+          "
