@@ -238,15 +238,75 @@ def _build_sampler(exec_spec: Dict, stack: Dict):
     return sampler, backend, shots
 
 
+class _KipuMergedJob:
+    """Fake job that wraps a pre-merged Result so BackendSamplerV2 can call .result()."""
+
+    def __init__(self, result):
+        self._result = result
+
+    def result(self):
+        return self._result
+
+
+def _patch_kipu_backend_for_batch(backend):
+    """
+    Monkey-patch the backend's run() to handle multi-circuit batch calls.
+
+    BackendSamplerV2 checks isinstance(backend, BackendV2) — so wrapping in
+    a plain class breaks the isinstance check. Instead, we patch run() directly
+    on the real backend object, preserving its type/identity.
+
+    Kipu backends only accept one QuantumCircuit per job. This patch intercepts
+    list calls, runs each circuit sequentially, then merges results into a single
+    standard Qiskit Result that BackendSamplerV2 expects.
+    """
+    from qiskit.result import Result as QiskitResult
+
+    original_run = backend.run
+
+    def _sequential_run(circuits, shots=None, **kwargs):
+        if not isinstance(circuits, list):
+            return original_run(circuits, shots=shots, **kwargs)
+
+        if len(circuits) == 1:
+            return original_run(circuits[0], shots=shots, **kwargs)
+
+        logger.debug(f"Kipu: running {len(circuits)} circuits sequentially")
+        sub_results = []
+        for i, circ in enumerate(circuits):
+            logger.debug(f"  Circuit {i + 1}/{len(circuits)}")
+            job = original_run(circ, shots=shots, **kwargs)
+            sub_results.append(job.result())
+
+        # Merge ExperimentResult lists into one Result
+        all_exp = []
+        for r in sub_results:
+            all_exp.extend(r.results)
+
+        merged = QiskitResult(
+            backend_name=sub_results[0].backend_name,
+            backend_version=sub_results[0].backend_version,
+            qobj_id="",
+            job_id="kipu-merged",
+            success=all(r.success for r in sub_results),
+            results=all_exp,
+        )
+        return _KipuMergedJob(merged)
+
+    backend.run = _sequential_run
+    return backend
+
+
 def _build_kipu_sampler(exec_spec: Dict, stack: Dict):
     """
     Kipu Quantum Hub cloud simulator sampler.
 
     Reads KIPU_TOKEN from the environment (never from the request/spec).
-    Falls back clearly if the package is missing or the token is not set.
+    Wraps the Kipu backend in _KipuSequentialBackend to handle the
+    multi-circuit batch limitation, then wraps in BackendSamplerV2
+    so VQC uses it identically to the local Aer sampler.
 
-    The Kipu backend is wrapped with BackendSamplerV2 so VQC can use it
-    identically to the local Aer sampler — zero change to ML training logic.
+    Free account allowed backend: azure.ionq.simulator
     """
     import os
 
@@ -254,7 +314,7 @@ def _build_kipu_sampler(exec_spec: Dict, stack: Dict):
     if not kipu_token:
         raise ValueError(
             "KIPU_TOKEN environment variable is not set. "
-            "Add your Kipu Quantum Hub personal access token to the .env file: "
+            "Add your Kipu personal access token to the .env file: "
             "KIPU_TOKEN=your_token_here"
         )
 
@@ -262,27 +322,29 @@ def _build_kipu_sampler(exec_spec: Dict, stack: Dict):
         from qhub.quantum.sdk import HubQiskitProvider
     except ImportError as exc:
         raise ImportError(
-            "qhub-quantum package is not installed. "
-            "Run: pip install qhub-quantum"
+            "qhub-quantum package is not installed. Run: pip install qhub-quantum"
         ) from exc
 
-    backend_id = os.getenv("KIPU_BACKEND", "qudora.sim.xgl")
+    backend_id = os.getenv("KIPU_BACKEND", "azure.ionq.simulator")
     shots = max(32, int(exec_spec.get("shots", 128)))
 
-    logger.info(f"Connecting to Kipu Quantum Hub backend: {backend_id}")
+    logger.info(f"Connecting to Kipu Quantum Hub: {backend_id}")
     try:
         provider = HubQiskitProvider(access_token=kipu_token)
-        backend = provider.get_backend(backend_id)
+        raw_backend = provider.get_backend(backend_id)
     except Exception as exc:
         raise RuntimeError(
             f"Could not connect to Kipu backend '{backend_id}': {exc}. "
-            "Check your KIPU_TOKEN and that the backend is online at "
+            "Check KIPU_TOKEN and backend availability at "
             "https://dashboard.hub.kipu-quantum.com/quantum-backends"
         ) from exc
 
+    # Monkey-patch run() to handle multi-circuit batch calls sequentially.
+    # Preserves isinstance(backend, BackendV2) identity — required by BackendSamplerV2.
+    backend = _patch_kipu_backend_for_batch(raw_backend)
     sampler = stack["BackendSamplerV2"](backend=backend, options={"default_shots": shots})
-    logger.info(f"Kipu sampler ready — backend={backend_id}, shots={shots}")
-    return sampler, backend, shots
+    logger.info(f"Kipu sampler ready — {backend_id}, shots={shots}")
+    return sampler, raw_backend, shots
 
 
 # ─── Model persistence ────────────────────────────────────────────────────────
@@ -578,7 +640,7 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
 def list_execution_backends() -> Dict[str, Any]:
     import os
     kipu_token_set = bool(os.getenv("KIPU_TOKEN", "").strip())
-    kipu_backend = os.getenv("KIPU_BACKEND", "qudora.sim.xgl")
+    kipu_backend = os.getenv("KIPU_BACKEND", "azure.ionq.simulator")
     return {
         "backends": [
             {
