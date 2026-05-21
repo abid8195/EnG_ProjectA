@@ -93,10 +93,21 @@ jobs:
           from qiskit_machine_learning.algorithms.classifiers import VQC
           from qiskit_algorithms.optimizers import COBYLA
           print('Qiskit Aer stack imported OK')
-          # Quick smoke test — build a 2-qubit circuit
           fm = ZZFeatureMap(feature_dimension=2, reps=1)
           ans = RealAmplitudes(num_qubits=2, reps=1)
-          print(f'Feature map: {fm.num_qubits} qubits')
-          print(f'Ansatz params: {ans.num_parameters}')
+          print(f'Feature map: {fm.num_qubits} qubits, ansatz params: {ans.num_parameters}')
           print('Qiskit circuit smoke test passed')
+          "
+
+      - name: Verify Kipu SDK is importable and backend list reflects token state
+        run: |
+          python -c "
+          from qhub.quantum.sdk import HubQiskitProvider
+          print('qhub-quantum SDK imported OK')
+          # Without token, list_execution_backends should show kipu as unavailable
+          from backend.quantum_runner import list_execution_backends
+          info = list_execution_backends()
+          kipu = next(b for b in info['backends'] if b['provider'] == 'kipu')
+          assert kipu['available'] == False, 'Should be unavailable when no token set'
+          print('Kipu backend status check OK:', kipu['note'])
           "

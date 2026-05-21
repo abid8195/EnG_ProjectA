@@ -119,8 +119,16 @@
             </label>
             <label class="field">Framework
               <select id="sel-framework">
-                <option value="qiskit">Qiskit</option>
+                <option value="qiskit">Qiskit Aer (Local)</option>
+                <option value="kipu">⚛ Kipu Cloud Simulator</option>
                 <option value="pennylane">PennyLane</option>
+              </select>
+            </label>
+            <label class="field" id="kipu-backend-row" style="display:none">Kipu Backend
+              <select id="sel-kipu-backend">
+                <option value="qudora.sim.xgl">Qamelion Emulator (qudora.sim.xgl)</option>
+                <option value="kipu.sim.qsim">Kipu QSim (kipu.sim.qsim)</option>
+                <option value="aws.sim.sv1">AWS Braket SV1 (aws.sim.sv1)</option>
               </select>
             </label>
             <label class="field">Layers / Reps

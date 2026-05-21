@@ -301,9 +301,15 @@ function deriveSpecFromCanvas() {
   };
 
   const framework = $("sel-framework").value || "qiskit";
-  const shots = parseInt($("inp-shots").value || 128, 10);
+  const shots = parseInt($("inp-shots").value || 512, 10);
 
-  return { framework, execution: { shots }, dataset, encoder, circuit, optimizer };
+  // Kipu-specific: pass the chosen cloud backend id inside execution spec
+  const kipuBackend = $("sel-kipu-backend")?.value || "qudora.sim.xgl";
+  const execution = framework === "kipu"
+    ? { shots, kipu_backend: kipuBackend }
+    : { shots };
+
+  return { framework, execution, dataset, encoder, circuit, optimizer };
 }
 
 function validateSpec(spec) {
@@ -731,11 +737,16 @@ function showResults(data, spec) {
   // Run summary
   const rs = $("run-summary");
   if (rs) {
+    const providerBadge = data.provider === "kipu"
+      ? `<span style="background:#e9d5ff;color:#6b21a8;padding:1px 7px;border-radius:12px;font-size:11px;font-weight:700">⚛ Kipu Cloud</span>`
+      : `<span style="background:#ccfbf1;color:#0d5e57;padding:1px 7px;border-radius:12px;font-size:11px;font-weight:700">Aer Local</span>`;
     rs.innerHTML = `
+      ${providerBadge} &nbsp;
+      <strong>Backend:</strong> ${data.backend || "—"} &nbsp;|&nbsp;
       <strong>Encoder:</strong> ${data.encoder || spec.encoder.type} &nbsp;|&nbsp;
       <strong>Circuit:</strong> ${data.circuit || spec.circuit.type} (${spec.circuit.num_qubits} qubits, ${spec.circuit.reps} reps) &nbsp;|&nbsp;
       <strong>Optimizer:</strong> ${data.optimizer || spec.optimizer.type} &nbsp;|&nbsp;
-      <strong>Shots:</strong> ${spec.shots} &nbsp;|&nbsp;
+      <strong>Shots:</strong> ${spec.execution?.shots || "—"} &nbsp;|&nbsp;
       <strong>Dataset:</strong> ${spec.dataset.path ? spec.dataset.path.split("/").pop() : "—"} &nbsp;|&nbsp;
       <strong>Model ID:</strong> <code>${data.model_id || "—"}</code>
     `;
@@ -1145,6 +1156,15 @@ document.addEventListener("DOMContentLoaded", () => {
   checkHealth();
   setInterval(checkHealth, 30000);
   initRegistry();
+
+  // ── Kipu backend row: show only when Kipu framework selected ─────────
+  const frameworkSel = $("sel-framework");
+  const kipuRow = $("kipu-backend-row");
+  function syncKipuRow() {
+    if (kipuRow) kipuRow.style.display = frameworkSel.value === "kipu" ? "" : "none";
+  }
+  frameworkSel?.addEventListener("change", syncKipuRow);
+  syncKipuRow();
 
   // ── Canvas toolbar ────────────────────────────────────────────────────
   function addCanvasNode(type, name, params) {

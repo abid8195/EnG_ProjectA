@@ -231,9 +231,57 @@ def _build_optimizer(opt_spec: Dict, stack: Dict):
 
 
 def _build_sampler(exec_spec: Dict, stack: Dict):
+    """Local Qiskit Aer statevector sampler — no credentials required."""
     shots = max(32, int(exec_spec.get("shots", 128)))
     backend = stack["AerSimulator"]()
     sampler = stack["BackendSamplerV2"](backend=backend, options={"default_shots": shots})
+    return sampler, backend, shots
+
+
+def _build_kipu_sampler(exec_spec: Dict, stack: Dict):
+    """
+    Kipu Quantum Hub cloud simulator sampler.
+
+    Reads KIPU_TOKEN from the environment (never from the request/spec).
+    Falls back clearly if the package is missing or the token is not set.
+
+    The Kipu backend is wrapped with BackendSamplerV2 so VQC can use it
+    identically to the local Aer sampler — zero change to ML training logic.
+    """
+    import os
+
+    kipu_token = os.getenv("KIPU_TOKEN", "").strip()
+    if not kipu_token:
+        raise ValueError(
+            "KIPU_TOKEN environment variable is not set. "
+            "Add your Kipu Quantum Hub personal access token to the .env file: "
+            "KIPU_TOKEN=your_token_here"
+        )
+
+    try:
+        from qhub.quantum.sdk import HubQiskitProvider
+    except ImportError as exc:
+        raise ImportError(
+            "qhub-quantum package is not installed. "
+            "Run: pip install qhub-quantum"
+        ) from exc
+
+    backend_id = os.getenv("KIPU_BACKEND", "qudora.sim.xgl")
+    shots = max(32, int(exec_spec.get("shots", 128)))
+
+    logger.info(f"Connecting to Kipu Quantum Hub backend: {backend_id}")
+    try:
+        provider = HubQiskitProvider(access_token=kipu_token)
+        backend = provider.get_backend(backend_id)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not connect to Kipu backend '{backend_id}': {exc}. "
+            "Check your KIPU_TOKEN and that the backend is online at "
+            "https://dashboard.hub.kipu-quantum.com/quantum-backends"
+        ) from exc
+
+    sampler = stack["BackendSamplerV2"](backend=backend, options={"default_shots": shots})
+    logger.info(f"Kipu sampler ready — backend={backend_id}, shots={shots}")
     return sampler, backend, shots
 
 
@@ -282,7 +330,13 @@ def rebuild_classifier(weights: np.ndarray, spec: Dict) -> Any:
     feature_map = _build_feature_map(n_features, enc_spec, stack)
     ansatz      = _build_ansatz(n_features, cir_spec, stack)
     optimizer   = _build_optimizer(opt_spec, stack)
-    sampler, aer_backend, _ = _build_sampler(exec_spec, stack)
+
+    framework = str(spec.get("framework", "qiskit")).lower()
+    if framework == "kipu":
+        sampler, _, _ = _build_kipu_sampler(exec_spec, stack)
+        pm_backend = stack["AerSimulator"]()
+    else:
+        sampler, pm_backend, _ = _build_sampler(exec_spec, stack)
 
     vqc = stack["VQC"](
         feature_map=feature_map,
@@ -290,7 +344,7 @@ def rebuild_classifier(weights: np.ndarray, spec: Dict) -> Any:
         optimizer=optimizer,
         sampler=sampler,
         pass_manager=stack["generate_preset_pass_manager"](
-            backend=aer_backend, optimization_level=1
+            backend=pm_backend, optimization_level=1
         ),
     )
 
@@ -353,10 +407,27 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
     feature_map = _build_feature_map(n_features, enc_spec, stack)
     ansatz = _build_ansatz(n_features, cir_spec, stack)
     optimizer = _build_optimizer(opt_spec, stack)
-    sampler, aer_backend, shots = _build_sampler(exec_spec, stack)
+
+    # ── Select execution backend ──────────────────────────────────────────────
+    # "kipu" uses Kipu Quantum Hub cloud simulator (token from KIPU_TOKEN env var).
+    # All other frameworks fall back to local Qiskit Aer (no credentials needed).
+    if framework == "kipu":
+        sampler, exec_backend, shots = _build_kipu_sampler(exec_spec, stack)
+        # For Kipu, use Aer for circuit transpilation only (pass manager).
+        # Transpilation determines native gate set; Kipu simulators accept
+        # standard Qiskit gates so Aer-based transpilation is compatible.
+        pm_backend = stack["AerSimulator"]()
+        provider_label = "kipu"
+        backend_label = exec_backend.name if hasattr(exec_backend, "name") else "kipu-cloud"
+    else:
+        sampler, exec_backend, shots = _build_sampler(exec_spec, stack)
+        pm_backend = exec_backend
+        provider_label = "aer"
+        backend_label = "qiskit-aer"
 
     logger.info(
-        f"Running VQC | encoder={enc_spec.get('type','angle')} | "
+        f"Running VQC | framework={framework} | backend={backend_label} | "
+        f"encoder={enc_spec.get('type','angle')} | "
         f"ansatz={cir_spec.get('type','realamplitudes')} | "
         f"optimizer={opt_spec.get('type','cobyla')} | "
         f"qubits={n_features} | shots={shots} | "
@@ -376,7 +447,7 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
         sampler=sampler,
         callback=_callback,
         pass_manager=stack["generate_preset_pass_manager"](
-            backend=aer_backend, optimization_level=1
+            backend=pm_backend, optimization_level=1
         ),
     )
     classifier.fit(X_train, y_train)
@@ -454,8 +525,8 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
         "encoder": enc_spec.get("type", "angle"),
         "circuit": cir_spec.get("type", "realamplitudes"),
         "optimizer": opt_spec.get("type", "cobyla"),
-        "provider": "aer",
-        "backend": "qiskit-aer",
+        "provider": provider_label,
+        "backend": backend_label,
         "shots": shots,
         "n_qubits": n_features,
         "n_train": int(len(X_train)),
@@ -505,15 +576,30 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
 # ─── Backends listing ─────────────────────────────────────────────────────────
 
 def list_execution_backends() -> Dict[str, Any]:
+    import os
+    kipu_token_set = bool(os.getenv("KIPU_TOKEN", "").strip())
+    kipu_backend = os.getenv("KIPU_BACKEND", "qudora.sim.xgl")
     return {
         "backends": [
             {
                 "provider": "aer",
+                "framework": "qiskit",
                 "backend": "qiskit-aer",
                 "label": "Local Aer Simulator",
                 "available": True,
                 "note": "Runs locally — no credentials required.",
-            }
+            },
+            {
+                "provider": "kipu",
+                "framework": "kipu",
+                "backend": kipu_backend,
+                "label": f"Kipu Cloud — {kipu_backend}",
+                "available": kipu_token_set,
+                "note": (
+                    "Ready — KIPU_TOKEN is set." if kipu_token_set
+                    else "Set KIPU_TOKEN environment variable to enable."
+                ),
+            },
         ],
-        "default": "aer",
+        "default": "kipu" if kipu_token_set else "qiskit",
     }
