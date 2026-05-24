@@ -276,28 +276,27 @@ function deriveSpecFromCanvas() {
     };
   }
 
-  // Encoder — node params override sidebar
+  // ── Sidebar inputs are always the source of truth for numeric params ──────
+  // Canvas node params hold the *type* (angle/cobyla/realamplitudes etc.)
+  // but user-facing sliders/inputs always win for maxiter, reps, shots.
   const encNode = byType["encoder"];
   const encoder = {
-    type: encNode?.params?.type || $("sel-encoding").value || "angle"
+    type: $("sel-encoding").value || encNode?.params?.type || "angle"
   };
 
-  // Circuit — qubit count must equal feature count; derive from dataset if circuit node is missing/stale
   const cirNode = byType["circuit"];
   const featureCount = dataset.feature_columns.length;
-  const nqRaw = parseInt(cirNode?.params?.num_qubits || featureCount, 10);
-  const nq = featureCount > 0 ? featureCount : Math.max(1, nqRaw);
+  const nq = featureCount > 0 ? featureCount : Math.max(1, parseInt(cirNode?.params?.num_qubits || 2, 10));
   const circuit = {
-    type: cirNode?.params?.type || $("sel-ansatz").value || "realamplitudes",
+    type: $("sel-ansatz").value || cirNode?.params?.type || "realamplitudes",
     num_qubits: nq,
-    reps: parseInt(cirNode?.params?.reps || $("inp-reps").value || 2, 10)
+    reps: parseInt($("inp-reps").value || 2, 10)   // sidebar always wins
   };
 
-  // Optimizer
   const optNode = byType["optimizer"];
   const optimizer = {
-    type: optNode?.params?.type || $("sel-optimizer").value || "cobyla",
-    maxiter: parseInt(optNode?.params?.maxiter || $("inp-maxiter").value || 20, 10)
+    type: $("sel-optimizer").value || optNode?.params?.type || "cobyla",
+    maxiter: parseInt($("inp-maxiter").value || 20, 10)  // sidebar always wins
   };
 
   const framework = $("sel-framework").value || "qiskit";
