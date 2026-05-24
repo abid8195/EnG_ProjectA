@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
 import time
 import traceback
 import uuid
@@ -54,6 +55,12 @@ CORS(app, origins=CORS_ORIGINS)
 from backend.quantum_runner import list_execution_backends, rebuild_classifier, run_pipeline
 from backend.dataset_catalog import DATASET_CONFIGS
 from backend.pipeline_registry import ANSATZ_REGISTRY, ENCODER_REGISTRY, OPTIMIZER_REGISTRY
+
+# ── Async job store ───────────────────────────────────────────────────────────
+# Jobs are kept in memory (reset on server restart — fine for local/demo use).
+# Each entry: {status, progress, result, error, started_at, request_id}
+_jobs: dict = {}
+_jobs_lock = threading.Lock()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -236,32 +243,93 @@ def analyze():
 
 @app.route("/api/run", methods=["POST"])
 def run():
+    """
+    Start a pipeline run asynchronously.
+
+    Returns immediately with {"status": "running", "job_id": "..."}
+    so the browser never hangs.  Poll GET /api/run/status/<job_id>
+    every few seconds to get live progress and the final result.
+    """
     req_id = str(uuid.uuid4())[:8]
     t0 = time.time()
-    logger.info(f"[{req_id}] /api/run start")
+    logger.info(f"[{req_id}] /api/run start (async)")
+
     try:
         spec = request.get_json(force=True)
         if not spec:
             return jsonify({"status": "error", "error": "Empty request body"}), 400
-        result = run_pipeline(spec)
-        elapsed = round(time.time() - t0, 2)
-        result.setdefault("status", "ok")
-        result["request_id"] = req_id
-        result["execution_time_s"] = elapsed
-        logger.info(f"[{req_id}] done in {elapsed}s | acc={result.get('accuracy','?')}")
-        return jsonify(result)
-    except ValueError as e:
-        logger.warning(f"[{req_id}] validation error: {e}")
-        return jsonify({"status": "error", "request_id": req_id, "error": str(e)}), 400
-    except ImportError as e:
-        logger.error(f"[{req_id}] import error: {e}")
-        return jsonify({"status": "error", "request_id": req_id, "error": str(e)}), 500
+
+        job_id = str(uuid.uuid4())[:12]
+
+        with _jobs_lock:
+            _jobs[job_id] = {
+                "status": "running",
+                "progress": "Initialising pipeline…",
+                "result": None,
+                "error": None,
+                "trace": None,
+                "started_at": t0,
+                "request_id": req_id,
+            }
+
+        def _progress(msg: str) -> None:
+            with _jobs_lock:
+                if job_id in _jobs:
+                    _jobs[job_id]["progress"] = msg
+
+        def _worker() -> None:
+            try:
+                result = run_pipeline(spec, progress_fn=_progress)
+                elapsed = round(time.time() - t0, 2)
+                result.setdefault("status", "ok")
+                result["request_id"] = req_id
+                result["execution_time_s"] = elapsed
+                logger.info(
+                    f"[{req_id}] job {job_id} done in {elapsed}s "
+                    f"| acc={result.get('accuracy', '?')}"
+                )
+                with _jobs_lock:
+                    _jobs[job_id].update({
+                        "status": "ok",
+                        "result": result,
+                        "progress": f"Complete — {elapsed}s",
+                    })
+            except ValueError as exc:
+                logger.warning(f"[{req_id}] job {job_id} validation error: {exc}")
+                with _jobs_lock:
+                    _jobs[job_id].update({"status": "error", "error": str(exc)})
+            except Exception as exc:
+                tb = traceback.format_exc()
+                logger.error(f"[{req_id}] job {job_id} error: {exc}\n{tb}")
+                with _jobs_lock:
+                    _jobs[job_id].update({
+                        "status": "error",
+                        "error": str(exc),
+                        "trace": tb,
+                    })
+
+        thread = threading.Thread(target=_worker, daemon=True, name=f"run-{job_id}")
+        thread.start()
+        logger.info(f"[{req_id}] job {job_id} spawned in background thread")
+
+        return jsonify({"status": "running", "job_id": job_id, "request_id": req_id})
+
     except Exception as e:
-        logger.error(f"[{req_id}] error: {e}\n{traceback.format_exc()}")
+        logger.error(f"[{req_id}] /api/run setup error: {e}")
+        return jsonify({"status": "error", "request_id": req_id, "error": str(e)}), 500
+
+
+@app.route("/api/run/status/<job_id>", methods=["GET"])
+def run_status(job_id: str):
+    """Poll this endpoint after POST /api/run to get live progress and the final result."""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
         return jsonify({
-            "status": "error", "request_id": req_id,
-            "error": str(e), "trace": traceback.format_exc(),
-        }), 500
+            "status": "error",
+            "error": "Job not found. The server may have restarted since this run was started.",
+        }), 404
+    return jsonify(job)
 
 
 @app.route("/api/run/batch", methods=["POST"])

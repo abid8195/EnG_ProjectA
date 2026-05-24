@@ -612,9 +612,49 @@ function applyMapperDialog() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Run pipeline
+// Run pipeline — async with live progress polling
 // ═══════════════════════════════════════════════════════════════════════════
 let runInProgress = false;
+let _cancelRequested = false;
+
+/**
+ * Poll GET /api/run/status/<jobId> until the job finishes or errors.
+ * Updates the run-bar with live progress and elapsed time.
+ * Returns the result dict on success, throws on error or cancel.
+ */
+async function pollJobUntilDone(jobId, rb, isKipu) {
+  // Kipu is slow (cloud round-trips); Aer finishes in seconds.
+  const pollMs = isKipu ? 4000 : 1500;
+  const startTs = Date.now();
+
+  while (true) {
+    // Honour Cancel button
+    if (_cancelRequested) throw new Error("Cancelled by user.");
+
+    await new Promise(res => setTimeout(res, pollMs));
+    if (_cancelRequested) throw new Error("Cancelled by user.");
+
+    const sr = await fetch(`/api/run/status/${jobId}`);
+    if (!sr.ok) throw new Error(`Status check failed (HTTP ${sr.status})`);
+    const job = await sr.json();
+
+    const elapsedSec = Math.round((Date.now() - startTs) / 1000);
+    const progressMsg = job.progress || "Running…";
+
+    if (job.status === "running") {
+      rb.innerHTML =
+        `<span class="spinner"></span> ${progressMsg} &nbsp;` +
+        `<span style="opacity:0.55;font-size:12px">(${elapsedSec}s elapsed)</span>`;
+
+    } else if (job.status === "ok") {
+      return job.result;
+
+    } else {
+      // "error" or unexpected
+      throw new Error(job.error || "Pipeline failed with unknown error.");
+    }
+  }
+}
 
 async function runPipeline() {
   if (runInProgress) return;
@@ -624,41 +664,55 @@ async function runPipeline() {
   if (errs.length) { alert("Cannot run:\n• " + errs.join("\n• ")); return; }
 
   runInProgress = true;
+  _cancelRequested = false;
   $("btn-run").disabled = true;
 
-  // Visual feedback
   const rb = $("run-bar");
   rb.style.display = "";
   rb.className = "running";
-  rb.innerHTML = '<span class="spinner"></span> Running quantum pipeline…';
 
-  // Mark nodes as running
+  const isKipu = spec.framework === "kipu";
+  rb.innerHTML = `<span class="spinner"></span> Starting ${isKipu ? "⚛ Kipu cloud" : "Aer"} pipeline…`;
+
   canvasModel.nodes.forEach(n => n.status = "running");
   renderCanvas();
 
   try {
+    // ── 1. POST to start — returns immediately with job_id ────────────────
     const r = await fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(spec)
     });
-    const data = await r.json();
-    if (!r.ok || data.status === "error") throw new Error(data.error || r.statusText);
+    const startData = await r.json();
+    if (!r.ok || startData.status === "error")
+      throw new Error(startData.error || r.statusText);
 
+    const jobId = startData.job_id;
+    if (!jobId) throw new Error("Server did not return a job_id.");
+
+    if (isKipu) {
+      rb.innerHTML =
+        `<span class="spinner"></span> ⚛ Job queued on Kipu Cloud (${jobId}) — ` +
+        `polling every 4s for progress…`;
+    }
+
+    // ── 2. Poll until done ────────────────────────────────────────────────
+    const data = await pollJobUntilDone(jobId, rb, isKipu);
+
+    // ── 3. Success ────────────────────────────────────────────────────────
     rb.className = "success";
-    rb.textContent = `✓ Done in ${data.execution_time_s ?? "?"}s — Accuracy: ${fmtPct(data.accuracy)}`;
+    rb.textContent =
+      `✓ Done in ${data.execution_time_s ?? "?"}s — Accuracy: ${fmtPct(data.accuracy)}`;
 
-    // Persist model
     if (data.model_id) {
       activeModelId = data.model_id;
       activeFeatureCols = spec.dataset.feature_columns;
     }
 
-    // Mark nodes ok
     canvasModel.nodes.forEach(n => n.status = "ok");
     renderCanvas();
 
-    // Store in history
     runHistory.push({
       label: `Run ${runHistory.length + 1} — ${spec.encoder.type} | ${spec.circuit.type} | ${spec.optimizer.type}`,
       spec: { ...spec },
@@ -666,23 +720,24 @@ async function runPipeline() {
       timestamp: new Date().toLocaleTimeString()
     });
 
-    // Populate results tab
     showResults(data, spec);
-
-    // Update experiments tab
     updateRunHistory();
-
-    // Switch to results
     showTab("results");
 
   } catch (e) {
-    rb.className = "error";
-    rb.textContent = "Error: " + e.message;
+    if (_cancelRequested) {
+      rb.className = "";
+      rb.textContent = "Run cancelled.";
+    } else {
+      rb.className = "error";
+      rb.textContent = "Error: " + e.message;
+    }
     canvasModel.nodes.forEach(n => n.status = "error");
     renderCanvas();
     console.error(e);
   } finally {
     runInProgress = false;
+    _cancelRequested = false;
     $("btn-run").disabled = false;
   }
 }
@@ -1238,9 +1293,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Run pipeline ──────────────────────────────────────────────────────
   document.getElementById("btn-run")?.addEventListener("click", runPipeline);
   document.getElementById("btn-cancel")?.addEventListener("click", () => {
-    runInProgress = false;
-    $("btn-run").disabled = false;
-    const rb = $("run-bar"); if (rb) { rb.textContent = "Cancelled."; rb.className = ""; }
+    if (runInProgress) {
+      _cancelRequested = true;
+      const rb = $("run-bar");
+      if (rb) { rb.textContent = "Cancelling… (current cloud job will still complete server-side)"; rb.className = ""; }
+    }
   });
 
   // ── Predict ───────────────────────────────────────────────────────────

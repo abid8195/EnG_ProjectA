@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 import time
 import types
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -35,6 +36,14 @@ logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT_DIR / "models"
+
+# Thread-local storage so the Kipu circuit patch can emit progress
+# without coupling to the job system directly.
+_thread_progress: threading.local = threading.local()
+
+# When framework=kipu, cap training samples to keep cloud job count
+# manageable. Each training sample = 1 Kipu cloud job per VQC call.
+KIPU_MAX_TRAIN_SAMPLES = 40
 
 
 # ─── Dependency loader ────────────────────────────────────────────────────────
@@ -271,10 +280,15 @@ def _patch_kipu_backend_for_batch(backend):
         if len(circuits) == 1:
             return original_run(circuits[0], shots=shots, **kwargs)
 
-        logger.debug(f"Kipu: running {len(circuits)} circuits sequentially")
+        total = len(circuits)
+        logger.debug(f"Kipu: running {total} circuits sequentially")
         sub_results = []
         for i, circ in enumerate(circuits):
-            logger.debug(f"  Circuit {i + 1}/{len(circuits)}")
+            # Emit circuit-level progress via thread-local callback
+            _progress_fn = getattr(_thread_progress, "fn", None)
+            if _progress_fn:
+                _progress_fn(f"⚛ Kipu circuit {i + 1}/{total} — waiting for cloud result…")
+            logger.debug(f"  Circuit {i + 1}/{total}")
             job = original_run(circ, shots=shots, **kwargs)
             sub_results.append(job.result())
 
@@ -422,18 +436,37 @@ def rebuild_classifier(weights: np.ndarray, spec: Dict) -> Any:
 
 # ─── Main pipeline entry point ────────────────────────────────────────────────
 
-def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
+def run_pipeline(
+    spec: Dict[str, Any],
+    progress_fn: Optional[Callable[[str], None]] = None,
+) -> Dict[str, Any]:
     """
     Execute a full VQC training run from a pipeline spec dict.
     Returns a dashboard-ready metrics dict including model_id for prediction.
+
+    progress_fn — optional callable(str) called at key stages so callers
+    (e.g. the async job system in app.py) can relay live status to the UI.
     """
+    def _update(msg: str) -> None:
+        if progress_fn:
+            try:
+                progress_fn(msg)
+            except Exception:
+                pass
+
+    # Wire progress into thread-local so the Kipu circuit patch can call it
+    # from deep inside BackendSamplerV2 without needing a direct reference.
+    _thread_progress.fn = _update
+
     t_start = time.time()
+    _update("Loading quantum stack…")
     stack = _load_quantum_stack()
 
     # ── 1. Load dataset ──────────────────────────────────────────────────────
     ds_spec = spec.get("dataset") or {}
     if not ds_spec:
         raise ValueError("dataset configuration is required.")
+    _update("Loading dataset…")
     X, y = _resolve_dataset(ds_spec)
 
     test_size = float(ds_spec.get("test_size", 0.25))
@@ -466,6 +499,7 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
     exec_spec = spec.get("execution") or {}
     framework = str(spec.get("framework", "qiskit")).lower()
 
+    _update("Building quantum circuit…")
     feature_map = _build_feature_map(n_features, enc_spec, stack)
     ansatz = _build_ansatz(n_features, cir_spec, stack)
     optimizer = _build_optimizer(opt_spec, stack)
@@ -474,6 +508,21 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
     # "kipu" uses Kipu Quantum Hub cloud simulator (token from KIPU_TOKEN env var).
     # All other frameworks fall back to local Qiskit Aer (no credentials needed).
     if framework == "kipu":
+        # Subsample training data: each sample = 1 cloud job per VQC call.
+        # Without this, large datasets produce thousands of cloud round-trips.
+        if len(X_train) > KIPU_MAX_TRAIN_SAMPLES:
+            logger.warning(
+                f"Kipu: subsampling train set {len(X_train)} → {KIPU_MAX_TRAIN_SAMPLES} samples"
+            )
+            _update(
+                f"⚛ Kipu: limiting training to {KIPU_MAX_TRAIN_SAMPLES} samples "
+                f"(was {len(X_train)}) to keep cloud job count manageable…"
+            )
+            rng = np.random.default_rng(seed)
+            idx = rng.choice(len(X_train), KIPU_MAX_TRAIN_SAMPLES, replace=False)
+            X_train, y_train = X_train[idx], y_train[idx]
+
+        _update("⚛ Connecting to Kipu Quantum Hub…")
         sampler, exec_backend, shots = _build_kipu_sampler(exec_spec, stack)
         # For Kipu, use Aer for circuit transpilation only (pass manager).
         # Transpilation determines native gate set; Kipu simulators accept
@@ -487,13 +536,18 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
         provider_label = "aer"
         backend_label = "qiskit-aer"
 
+    maxiter = max(1, int(opt_spec.get("maxiter", 20)))
     logger.info(
         f"Running VQC | framework={framework} | backend={backend_label} | "
         f"encoder={enc_spec.get('type','angle')} | "
         f"ansatz={cir_spec.get('type','realamplitudes')} | "
         f"optimizer={opt_spec.get('type','cobyla')} | "
         f"qubits={n_features} | shots={shots} | "
-        f"maxiter={opt_spec.get('maxiter',20)}"
+        f"maxiter={maxiter}"
+    )
+    _update(
+        f"Training VQC on {backend_label} — "
+        f"{len(X_train)} samples, {n_features} qubits, up to {maxiter} iterations…"
     )
 
     # ── 4. Train VQC ─────────────────────────────────────────────────────────
@@ -501,6 +555,11 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
 
     def _callback(_weights, obj_val):
         loss_history.append(float(obj_val))
+        iteration = len(loss_history)
+        _update(
+            f"{'⚛ Kipu' if framework == 'kipu' else 'Aer'} — "
+            f"iteration {iteration}/{maxiter} complete, loss={obj_val:.4f}"
+        )
 
     classifier = stack["VQC"](
         feature_map=feature_map,
@@ -552,9 +611,10 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
     base_loss = float(log_loss(y_train, baseline.predict_proba(X_train)))
 
     # ── 7. Build training curves ──────────────────────────────────────────────
+    _update("Evaluating model and computing metrics…")
     # loss_history contains real Qiskit VQC objective callback values.
     # We pad/extend to match requested epochs for a consistent chart length.
-    requested_epochs = max(1, int(opt_spec.get("maxiter", 20)))
+    requested_epochs = maxiter
     observed_loss = [float(v) for v in loss_history]
     n_observed = len(observed_loss)
     history_len = max(n_observed, requested_epochs, 2)
@@ -576,10 +636,13 @@ def run_pipeline(spec: Dict[str, Any]) -> Dict[str, Any]:
     accuracy_curve = np.linspace(acc_start, train_acc, history_len).tolist()
 
     # ── 8. Persist model for prediction endpoint ──────────────────────────────
+    _update("Saving model…")
     model_id = _save_model(classifier, scaler, feature_columns, spec)
 
     # ── 9. Build response ─────────────────────────────────────────────────────
     elapsed = round(time.time() - t_start, 2)
+    _update(f"Complete — {elapsed}s total")
+    _thread_progress.fn = None  # clear so next run starts clean
 
     return {
         "status": "ok",
