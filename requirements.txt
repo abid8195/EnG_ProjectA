@@ -12,7 +12,8 @@ waitress>=3.0.0
 gunicorn>=21.0.0
 
 # Qiskit quantum stack
-qiskit>=1.0.0,<2.0.0
+# qhub-quantum requires qiskit==2.2.2, so allow 2.x
+qiskit>=2.2.2,<3.0.0
 qiskit-algorithms>=0.3.0
 qiskit-machine-learning>=0.7.0
 qiskit-aer>=0.14.0

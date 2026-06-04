@@ -19,6 +19,7 @@ models/*
 !models/.gitkeep
 logs/*
 !logs/.gitkeep
+generated_run.py
 
 # IDE
 .vscode/settings.json
